@@ -41,7 +41,7 @@ async def bard(client: Client, message: types.Message):
         print(f"Bard error: {e}")
         await message.reply("Sorry, an unexpected error had occured.")
 
-@app.on_message(filters.text & filters.private)
+@app.on_message(filters.text)
 async def message_event(client: Client, message: types.Message):
     # تثبيحات
     if message.text.startswith("ثبح"): await message.reply("ثباحو")
