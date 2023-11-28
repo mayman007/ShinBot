@@ -2,4 +2,5 @@ pyrogram
 bardapi
 python-dotenv
 httpx
+anime-api
 tgcrypto
