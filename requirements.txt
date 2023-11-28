@@ -1,4 +1,5 @@
 pyrogram
 bardapi
 python-dotenv
+httpx
 tgcrypto

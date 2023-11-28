@@ -1,7 +1,10 @@
+import asyncio
 from pyrogram import Client, filters, types
 import random
 from Bard import AsyncChatbot
 from dotenv import dotenv_values
+import time
+import httpx
 
 # Load variables from the .env file
 config = dotenv_values(".env")
@@ -15,11 +18,56 @@ app = Client("my_bot", api_id=api_id, api_hash=api_hash)
 async def echo(client: Client, message: types.Message):
     await message.reply(message.text.replace("/echo ", ""))
 
+@app.on_message(filters.command("ping"))
+async def ping(client: Client, message: types.Message):
+    start_time = time.time()
+    sent_message = await message.reply("...")
+    end_time = time.time()
+    latency = round((end_time - start_time) * 1000, 2)
+    await sent_message.edit(f"Pong! Latency: {latency}ms")
+
+@app.on_message(filters.command("timer"))
+async def timer(client: Client, message: types.Message):
+    time = message.text.replace("/timer ", "").strip()
+    if time == "": await message.reply("Type time and time unit [s,m,h,d,w,mo,y] correctly.")
+    get_time = {
+    "s": 1, "m": 60, "h": 3600, "d": 86400,
+    "w": 604800, "mo": 2592000, "y": 31104000 }
+    timer = time
+    a = time[-1]
+    b = get_time.get(a)
+    c = time[:-1]
+    try: int(c)
+    except: return await message.reply("Type time and time unit [s,m,h,d,w,mo,y] correctly.")
+    try:
+        sleep = int(b) * int(c)
+        await message.reply(f"Timer set to {timer}.")
+    except: return await message.reply("Type time and time unit [s,m,h,d,w,mo,y] correctly.")
+    await asyncio.sleep(sleep)
+    await message.reply("Time over")
+
+@app.on_message(filters.command("affirmation"))
+async def affirmation(client: Client, message: types.Message):
+    async with httpx.AsyncClient() as session:
+        response = await session.get("https://www.affirmations.dev/")
+        data = response.json()
+        affirmation = data["affirmation"]
+        await message.reply(affirmation)
+
+@app.on_message(filters.command("advice"))
+async def advice(client: Client, message: types.Message):
+    async with httpx.AsyncClient() as session:
+        response = await session.get("https://api.adviceslip.com/advice")
+        data = response.json()
+        advice = data["slip"]["advice"]
+        await message.reply(advice)
+
 @app.on_message(filters.command("bard"))
 async def bard(client: Client, message: types.Message):
     BARD_1PSID = config.get("BARD_1PSID")
     BARD_1PSIDCC = config.get("BARD_1PSIDCC")
     prompt = message.text.replace("/bard", "").strip()
+    if prompt == "": return await message.reply("Please write your question on the same message.")
     try:
         bard = await AsyncChatbot.create(BARD_1PSID, BARD_1PSIDCC)
         response = await bard.ask(prompt)
