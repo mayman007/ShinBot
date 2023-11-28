@@ -5,6 +5,7 @@ from Bard import AsyncChatbot
 from dotenv import dotenv_values
 import time
 import httpx
+from anime_api.apis import NekosAPI
 
 # Load variables from the .env file
 config = dotenv_values(".env")
@@ -29,7 +30,7 @@ async def ping(client: Client, message: types.Message):
 @app.on_message(filters.command("timer"))
 async def timer(client: Client, message: types.Message):
     time = message.text.replace("/timer ", "").strip()
-    if time == "": await message.reply("Type time and time unit [s,m,h,d,w,mo,y] correctly.")
+    if time == "": return await message.reply("Type time and time unit [s,m,h,d,w,mo,y] correctly.")
     get_time = {
     "s": 1, "m": 60, "h": 3600, "d": 86400,
     "w": 604800, "mo": 2592000, "y": 31104000 }
@@ -46,21 +47,62 @@ async def timer(client: Client, message: types.Message):
     await asyncio.sleep(sleep)
     await message.reply("Time over")
 
+@app.on_message(filters.command("character"))
+async def character(client: Client, message: types.Message):
+    name = message.text.replace("/character", "").strip()
+    print(name)
+    if name == "": return await message.reply("Type character name.")
+    waiting_msgs_list = ["Searching for something nice...", "Wait a moment...", "Fetching..."]
+    waiting_msg = await message.reply(random.choice(waiting_msgs_list))
+    nekos = NekosAPI()
+    characters = nekos.get_characters(limit=10, offset=0, search=f"%?{name}%?")
+    for character in characters:
+        print(character)
+        character_ages = ""
+        for age in character.ages:
+            character_ages = f"{character_ages}{age}, "
+        character_ages = character_ages[:-2]
+        character_occupations = ""
+        for occupation in character.occupations:
+            character_occupations = f"{character_occupations}{occupation}, "
+        character_occupations = character_occupations[:-2]
+        await message.reply(f"- **Name:** {character.name}\n- **Source:** {character.source}\n- **Age:** {character_ages} ({character.birth_date})\n- **Gender:** {character.gender}\n- **Nationality:** {character.nationality}\n- **Occupations:** {character_occupations}\n- **Description:** {character.description}")
+    await waiting_msg.delete()
+
+@app.on_message(filters.command("neko"))
+async def neko(client: Client, message: types.Message):
+    waiting_msgs_list = ["Searching for something nice...", "Wait a moment...", "Fetching..."]
+    waiting_msg = await message.reply(random.choice(waiting_msgs_list))
+    nekos = NekosAPI()
+    image = nekos.get_random_image(categories=["kemonomimi"])
+    await message.reply_photo(image.url)
+    await waiting_msg.delete()
+
+@app.on_message(filters.command("dog"))
+async def dog(client: Client, message: types.Message):
+    async with httpx.AsyncClient() as session:
+        response = await session.get("https://random.dog/woof.json")
+    data = response.json()
+    dog_url = data["url"]
+    if dog_url.endswith(".mp4"): return await message.reply_video(dog_url)
+    elif dog_url.endswith(".jpg") or dog_url.endswith(".png"): return await message.reply_photo(dog_url)
+    elif dog_url.endswith(".gif"): return await message.reply_animation(dog_url)
+
 @app.on_message(filters.command("affirmation"))
 async def affirmation(client: Client, message: types.Message):
     async with httpx.AsyncClient() as session:
         response = await session.get("https://www.affirmations.dev/")
-        data = response.json()
-        affirmation = data["affirmation"]
-        await message.reply(affirmation)
+    data = response.json()
+    affirmation = data["affirmation"]
+    await message.reply(affirmation)
 
 @app.on_message(filters.command("advice"))
 async def advice(client: Client, message: types.Message):
     async with httpx.AsyncClient() as session:
         response = await session.get("https://api.adviceslip.com/advice")
-        data = response.json()
-        advice = data["slip"]["advice"]
-        await message.reply(advice)
+    data = response.json()
+    advice = data["slip"]["advice"]
+    await message.reply(advice)
 
 @app.on_message(filters.command("bard"))
 async def bard(client: Client, message: types.Message):
