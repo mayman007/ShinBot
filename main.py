@@ -69,14 +69,14 @@ async def character(client: Client, message: types.Message):
         await message.reply(f"- **Name:** {character.name}\n- **Source:** {character.source}\n- **Age:** {character_ages} ({character.birth_date})\n- **Gender:** {character.gender}\n- **Nationality:** {character.nationality}\n- **Occupations:** {character_occupations}\n- **Description:** {character.description}")
     await waiting_msg.delete()
 
-@app.on_message(filters.command("neko"))
-async def neko(client: Client, message: types.Message):
-    waiting_msgs_list = ["Searching for something nice...", "Wait a moment...", "Fetching..."]
-    waiting_msg = await message.reply(random.choice(waiting_msgs_list))
-    nekos = NekosAPI()
-    image = nekos.get_random_image(categories=["kemonomimi"])
-    await message.reply_photo(image.url)
-    await waiting_msg.delete()
+# @app.on_message(filters.command("neko"))
+# async def neko(client: Client, message: types.Message):
+#     waiting_msgs_list = ["Searching for something nice...", "Wait a moment...", "Fetching..."]
+#     waiting_msg = await message.reply(random.choice(waiting_msgs_list))
+#     nekos = NekosAPI()
+#     image = nekos.get_random_image(categories=["kemonomimi"])
+#     await message.reply_photo(image.url)
+#     await waiting_msg.delete()
 
 @app.on_message(filters.command("dog"))
 async def dog(client: Client, message: types.Message):
