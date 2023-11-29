@@ -1,4 +1,5 @@
 import asyncio
+import io
 from pyrogram import Client, filters, types
 import random
 from Bard import AsyncChatbot
@@ -6,6 +7,7 @@ from dotenv import dotenv_values
 import time
 import httpx
 from anime_api.apis import NekosAPI
+import praw
 
 # Load variables from the .env file
 config = dotenv_values(".env")
@@ -29,7 +31,7 @@ async def ping(client: Client, message: types.Message):
 
 @app.on_message(filters.command("timer"))
 async def timer(client: Client, message: types.Message):
-    time = message.text.replace("/timer ", "").strip()
+    time = message.text.replace("/timer ", "").replace("@shinobi7kbot", "").strip()
     if time == "": return await message.reply("Type time and time unit [s,m,h,d,w,mo,y] correctly.")
     get_time = {
     "s": 1, "m": 60, "h": 3600, "d": 86400,
@@ -47,26 +49,111 @@ async def timer(client: Client, message: types.Message):
     await asyncio.sleep(sleep)
     await message.reply("Time over")
 
-@app.on_message(filters.command("character"))
-async def character(client: Client, message: types.Message):
-    name = message.text.replace("/character", "").strip()
-    print(name)
-    if name == "": return await message.reply("Type character name.")
-    waiting_msgs_list = ["Searching for something nice...", "Wait a moment...", "Fetching..."]
-    waiting_msg = await message.reply(random.choice(waiting_msgs_list))
-    nekos = NekosAPI()
-    characters = nekos.get_characters(limit=10, offset=0, search=f"%?{name}%?")
-    for character in characters:
-        print(character)
-        character_ages = ""
-        for age in character.ages:
-            character_ages = f"{character_ages}{age}, "
-        character_ages = character_ages[:-2]
-        character_occupations = ""
-        for occupation in character.occupations:
-            character_occupations = f"{character_occupations}{occupation}, "
-        character_occupations = character_occupations[:-2]
-        await message.reply(f"- **Name:** {character.name}\n- **Source:** {character.source}\n- **Age:** {character_ages} ({character.birth_date})\n- **Gender:** {character.gender}\n- **Nationality:** {character.nationality}\n- **Occupations:** {character_occupations}\n- **Description:** {character.description}")
+# @app.on_message(filters.command("character"))
+# async def character(client: Client, message: types.Message):
+#     name = message.text.replace("/character", "").strip()
+#     print(name)
+#     if name == "": return await message.reply("Type character name.")
+#     waiting_msgs_list = ["Searching for something nice...", "Wait a moment...", "Fetching..."]
+#     waiting_msg = await message.reply(random.choice(waiting_msgs_list))
+#     nekos = NekosAPI()
+#     characters = nekos.get_characters(limit=10, offset=0, search=f"%?{name}%?")
+#     for character in characters:
+#         print(character)
+#         character_ages = ""
+#         for age in character.ages:
+#             character_ages = f"{character_ages}{age}, "
+#         character_ages = character_ages[:-2]
+#         character_occupations = ""
+#         for occupation in character.occupations:
+#             character_occupations = f"{character_occupations}{occupation}, "
+#         character_occupations = character_occupations[:-2]
+#         await message.reply(f"- **Name:** {character.name}\n- **Source:** {character.source}\n- **Age:** {character_ages} ({character.birth_date})\n- **Gender:** {character.gender}\n- **Nationality:** {character.nationality}\n- **Occupations:** {character_occupations}\n- **Description:** {character.description}")
+#     await waiting_msg.delete()
+
+@app.on_message(filters.command("imagine"))
+async def imagine(client: Client, message: types.Message):
+    something_to_imagine = message.text.replace("/imagine", "").replace("@shinobi7kbot", "").strip()
+    if something_to_imagine == "": return await message.reply("You have to descripe the image.")
+    waiting_msg = await message.reply("Wait a moment...")
+    api_key = config.get("WIBU_API_KEY")
+    url = "https://wibu-api.eu.org/api/ai/midjourney"
+    params = {
+        'query': something_to_imagine,
+        'x_wibu_key': api_key
+    }
+    headers = {
+        'accept': 'application/json',
+        'X-WIBU-Key': api_key
+    }
+    timeout = httpx.Timeout(30.0, connect=60.0)
+    async with httpx.AsyncClient(timeout=timeout) as session:
+        response = await session.get(url=url, headers=headers, params=params)
+    image_bytes = response.read()
+    with io.BytesIO(image_bytes) as image_file: # converts to file-like object
+        await message.reply_photo(image_file)
+    await waiting_msg.delete()
+
+@app.on_message(filters.command("search"))
+async def search(client: Client, message: types.Message):
+    something_to_search = message.text.replace("/search", "").replace("@shinobi7kbot", "").strip()
+    if something_to_search == "": return await message.reply("Type something to search.")
+    waiting_msg = await message.reply("Wait a moment...")
+    api_key = config.get("WIBU_API_KEY")
+    url = "https://wibu-api.eu.org/api/google/search"
+    params = {
+        'query': something_to_search,
+        'x_wibu_key': api_key
+    }
+    headers = {
+        'accept': 'application/json',
+        'X-WIBU-Key': api_key
+    }
+    timeout = httpx.Timeout(30.0, connect=60.0)
+    async with httpx.AsyncClient(timeout=timeout) as session:
+        response = await session.get(url=url, headers=headers, params=params)
+    results = response.json()
+    index = 0
+    results_message = ""
+    try:
+        for result in results["result"]:
+            index += 1
+            results_message = results_message + f"**{index}:** {result["title"]}\n- **Description:** {result["snippet"]}\n- **URL:** {result["link"]}\n\n"
+            if index == 10: break
+        await message.reply(results_message)
+    except Exception as e:
+        print(e)
+        await message.reply("Results not found.")
+    await waiting_msg.delete()
+
+@app.on_message(filters.command("ln"))
+async def ln(client: Client, message: types.Message):
+    ln_name = message.text.replace("/ln", "").replace("@shinobi7kbot", "").strip()
+    if ln_name == "": return await message.reply("Type LN title.")
+    waiting_msg = await message.reply("Wait a moment...")
+    api_key = config.get("WIBU_API_KEY")
+    url = "https://wibu-api.eu.org/api/novel/novelupdates/search"
+    params = {
+        'query': ln_name,
+        'x_wibu_key': api_key
+    }
+    headers = {
+        'accept': 'application/json',
+        'X-WIBU-Key': api_key
+    }
+    timeout = httpx.Timeout(30.0, connect=60.0)
+    async with httpx.AsyncClient(timeout=timeout) as session:
+        response = await session.get(url=url, headers=headers, params=params)
+    results = response.json()
+    index = 0
+    try:
+        for result in results["result"]:
+            await message.reply_photo(photo=result["img"], caption=f"- **Title:** {result["title"]}\n- **Chapters:** {result["chapter"]}\n- **Tags:** {result["tags"]}\n- **URL:** {result["url"]}")
+            index += 1
+            if index == 5: break
+    except Exception as e:
+        print(e)
+        await message.reply("LN not found.")
     await waiting_msg.delete()
 
 # @app.on_message(filters.command("neko"))
@@ -77,6 +164,63 @@ async def character(client: Client, message: types.Message):
 #     image = nekos.get_random_image(categories=["kemonomimi"])
 #     await message.reply_photo(image.url)
 #     await waiting_msg.delete()
+
+@app.on_message(filters.command("reverse"))
+async def reverse(client: Client, message: types.Message):
+    your_words = message.text.replace("/reverse", "").replace("@shinobi7kbot", "").strip()
+    if your_words == "": return await message.reply("Type some words.")
+    t_rev = your_words[::-1].replace("@", "@\u200B").replace("&", "&\u200B")
+    await message.reply(f"🔁 {t_rev}")
+
+@app.on_message(filters.command("slot"))
+async def slot(client: Client, message: types.Message):
+    emojis = "🍎🍊🍐🍋🍉🍇🍓🍒"
+    a, b, c = [random.choice(emojis) for g in range(3)]
+    slotmachine = f"**[ {a} {b} {c} ]\n{message.from_user.first_name}**,"
+    if (a == b == c): await message.reply(f"{slotmachine} All matching, you won! 🎉")
+    elif (a == b) or (a == c) or (b == c): await message.reply(f"{slotmachine} 2 in a row, you won! 🎉")
+    else: await message.reply(f"{slotmachine} No match, you lost 😢")
+
+@app.on_message(filters.command("coinflip"))
+async def coinflip(client: Client, message: types.Message):
+    coinsides = ["Heads", "Tails"]
+    await message.reply(f"**{message.from_user.first_name}** flipped a coin and got **{random.choice(coinsides)}**!")
+
+@app.on_message(filters.command("meme"))
+async def meme(client: Client, message: types.Message):
+    reddit = praw.Reddit(
+        client_id = config.get("REDDIT_CLIENT_ID"),
+        client_secret = config.get("REDDIT_CLIENT_SECRET"),
+        user_agent = "ShinobiBot",
+        check_for_async = False
+        )
+    subreddit = reddit.subreddit("Animemes")
+    all_subs = []
+    hot = subreddit.hot(limit=50)
+    for submission in hot:
+        all_subs.append(submission)
+        random_sub = random.choice(all_subs)
+        name = random_sub.title
+        url = random_sub.url
+    if ".gif" in url: await message.reply_animation(url, caption=name)
+    elif ".mp4" in url: await message.reply_video(url, caption=name)
+    else: await message.reply_photo(url, caption=name)
+
+@app.on_message(filters.command("geekjoke"))
+async def geekjoke(client: Client, message: types.Message):
+    async with httpx.AsyncClient() as session:
+        response = await session.get("https://geek-jokes.sameerkumar.website/api?format=json")
+    data = response.json()
+    joke = data["joke"]
+    await message.reply(joke)
+
+@app.on_message(filters.command("dadjoke"))
+async def dadjoke(client: Client, message: types.Message):
+    async with httpx.AsyncClient() as session:
+        response = await session.get("https://icanhazdadjoke.com/slack")
+    data = response.json()
+    joke = data["attachments"][0]["text"]
+    await message.reply(joke)
 
 @app.on_message(filters.command("dog"))
 async def dog(client: Client, message: types.Message):
@@ -108,7 +252,7 @@ async def advice(client: Client, message: types.Message):
 async def bard(client: Client, message: types.Message):
     BARD_1PSID = config.get("BARD_1PSID")
     BARD_1PSIDCC = config.get("BARD_1PSIDCC")
-    prompt = message.text.replace("/bard", "").strip()
+    prompt = message.text.replace("/bard", "").replace("@shinobi7kbot", "").strip()
     if prompt == "": return await message.reply("Please write your question on the same message.")
     try:
         bard = await AsyncChatbot.create(BARD_1PSID, BARD_1PSIDCC)

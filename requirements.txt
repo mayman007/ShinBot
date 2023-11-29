@@ -3,4 +3,5 @@ bardapi
 python-dotenv
 httpx
 anime-api
+praw
 tgcrypto
