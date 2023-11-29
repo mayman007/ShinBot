@@ -54,7 +54,7 @@ async def timer(client: Client, message: types.Message):
 #     name = message.text.replace("/character", "").strip()
 #     print(name)
 #     if name == "": return await message.reply("Type character name.")
-#     waiting_msgs_list = ["Searching for something nice...", "Wait a moment...", "Fetching..."]
+#     waiting_msgs_list = ['Searching for something nice...", "Wait a moment...", "Fetching...']
 #     waiting_msg = await message.reply(random.choice(waiting_msgs_list))
 #     nekos = NekosAPI()
 #     characters = nekos.get_characters(limit=10, offset=0, search=f"%?{name}%?")
@@ -116,11 +116,11 @@ async def search(client: Client, message: types.Message):
     index = 0
     results_message = ""
     try:
-        for result in results["result"]:
+        for result in results['result']:
             index += 1
-            title = result["title"]
-            link = result["link"]
-            snippet = result["snippet"]
+            title = result['title']
+            link = result['link']
+            snippet = result['snippet']
             results_message = results_message + f"**[{title}]({link})**\n- {snippet}\n\n"
             if index == 10: break
         await message.reply(results_message)
@@ -150,8 +150,8 @@ async def ln(client: Client, message: types.Message):
     results = response.json()
     index = 0
     try:
-        for result in results["result"]:
-            await message.reply_photo(photo=result["img"], caption=f"- **Title:** {result["title"]}\n- **Chapters:** {result["chapter"]}\n- **Tags:** {result["tags"]}\n- **URL:** {result["url"]}")
+        for result in results['result']:
+            await message.reply_photo(photo=result['img'], caption=f"- **Title:** {result['title']}\n- **Chapters:** {result['chapter']}\n- **Tags:** {result['tags']}\n- **URL:** {result['url']}")
             index += 1
             if index == 5: break
     except Exception as e:
@@ -161,10 +161,10 @@ async def ln(client: Client, message: types.Message):
 
 # @app.on_message(filters.command("neko"))
 # async def neko(client: Client, message: types.Message):
-#     waiting_msgs_list = ["Searching for something nice...", "Wait a moment...", "Fetching..."]
+#     waiting_msgs_list = ['Searching for something nice...", "Wait a moment...", "Fetching...']
 #     waiting_msg = await message.reply(random.choice(waiting_msgs_list))
 #     nekos = NekosAPI()
-#     image = nekos.get_random_image(categories=["kemonomimi"])
+#     image = nekos.get_random_image(categories=['kemonomimi'])
 #     await message.reply_photo(image.url)
 #     await waiting_msg.delete()
 
@@ -186,7 +186,7 @@ async def slot(client: Client, message: types.Message):
 
 @app.on_message(filters.command("coinflip"))
 async def coinflip(client: Client, message: types.Message):
-    coinsides = ["Heads", "Tails"]
+    coinsides = ['Heads", "Tails']
     await message.reply(f"**{message.from_user.first_name}** flipped a coin and got **{random.choice(coinsides)}**!")
 
 @app.on_message(filters.command("meme"))
@@ -214,7 +214,7 @@ async def geekjoke(client: Client, message: types.Message):
     async with httpx.AsyncClient() as session:
         response = await session.get("https://geek-jokes.sameerkumar.website/api?format=json")
     data = response.json()
-    joke = data["joke"]
+    joke = data['joke']
     await message.reply(joke)
 
 @app.on_message(filters.command("dadjoke"))
@@ -222,7 +222,7 @@ async def dadjoke(client: Client, message: types.Message):
     async with httpx.AsyncClient() as session:
         response = await session.get("https://icanhazdadjoke.com/slack")
     data = response.json()
-    joke = data["attachments"][0]["text"]
+    joke = data['attachments'][0]['text']
     await message.reply(joke)
 
 @app.on_message(filters.command("dog"))
@@ -230,7 +230,7 @@ async def dog(client: Client, message: types.Message):
     async with httpx.AsyncClient() as session:
         response = await session.get("https://random.dog/woof.json")
     data = response.json()
-    dog_url = data["url"]
+    dog_url = data['url']
     if dog_url.endswith(".mp4"): return await message.reply_video(dog_url)
     elif dog_url.endswith(".jpg") or dog_url.endswith(".png"): return await message.reply_photo(dog_url)
     elif dog_url.endswith(".gif"): return await message.reply_animation(dog_url)
@@ -240,7 +240,7 @@ async def affirmation(client: Client, message: types.Message):
     async with httpx.AsyncClient() as session:
         response = await session.get("https://www.affirmations.dev/")
     data = response.json()
-    affirmation = data["affirmation"]
+    affirmation = data['affirmation']
     await message.reply(affirmation)
 
 @app.on_message(filters.command("advice"))
@@ -248,7 +248,7 @@ async def advice(client: Client, message: types.Message):
     async with httpx.AsyncClient() as session:
         response = await session.get("https://api.adviceslip.com/advice")
     data = response.json()
-    advice = data["slip"]["advice"]
+    advice = data['slip']['advice']
     await message.reply(advice)
 
 @app.on_message(filters.command("bard"))
@@ -293,16 +293,16 @@ async def message_event(client: Client, message: types.Message):
                 "يب" , "يب يب" , "اتكل علي الله يعم" , "مش فايقلك" ,
                 "هي دي محتاجه سؤال!؟" , "لا" , "انا بقولك لا" , "اكيد لا" , "نوب" , "معرفش" ,
                 "اكيد يغالي" , "اكيد ينقم" , "لا هه" , "صدقني انا ذات نفسي معرفش" , "انا لو أعرف هقولك"]
-        hellos = ["نعم" , "نعم يغالي" , "نعم ينقم" , "عايز ايه" , "نعم يخويا"]
-        steins_keys = ["stein" , "شتاين" , "ستاين"]
-        steins = ["شتاينز الأعظم" , "شتاينز فوق" , "شتاينز فوق مستوي التقييم البشري" , "شتاينز اعظم انمي"]
-        shinobi_keywords = ["shinobi" , "شنوبي" , "شنبي" , "شنوب" , "شينوبي"]
-        father = ["شنوبي ابويا وعمي وعم عيالي" , "شنبي ابويا وعمي" , "شنوبي احسن اب في العالم"]
-        azab = ["ده حنين عليا خالث" , "بابا شنبي مش بيمد ايده عليا" , "مش بيلمسني"]
-        tabla = ["لا طبعا يغالي" , "شنوبي عمي وعم عيالي" , "شنوبي عمك" , "شنوبي فوق"]
-        love = ["حبك" , "حبق" , "وانا كمان يغالي" , "+1"]
-        win = ["مش هتكسب هه" , "نصيبك مش هتكسب" , "انا بقولك لا" , "على ضمانتي"]
-        elhal = ["الحمدلله يخويا", "الحمدلله يغالي", "تمام الحمدلله"]
+        hellos = ['نعم" , "نعم يغالي" , "نعم ينقم" , "عايز ايه" , "نعم يخويا']
+        steins_keys = ['stein" , "شتاين" , "ستاين']
+        steins = ['شتاينز الأعظم" , "شتاينز فوق" , "شتاينز فوق مستوي التقييم البشري" , "شتاينز اعظم انمي']
+        shinobi_keywords = ['shinobi" , "شنوبي" , "شنبي" , "شنوب" , "شينوبي']
+        father = ['شنوبي ابويا وعمي وعم عيالي" , "شنبي ابويا وعمي" , "شنوبي احسن اب في العالم']
+        azab = ['ده حنين عليا خالث" , "بابا شنبي مش بيمد ايده عليا" , "مش بيلمسني']
+        tabla = ['لا طبعا يغالي" , "شنوبي عمي وعم عيالي" , "شنوبي عمك" , "شنوبي فوق']
+        love = ['حبك" , "حبق" , "وانا كمان يغالي" , "+1']
+        win = ['مش هتكسب هه" , "نصيبك مش هتكسب" , "انا بقولك لا" , "على ضمانتي']
+        elhal = ['الحمدلله يخويا", "الحمدلله يغالي", "تمام الحمدلله']
 
         #me responses
         if "انا" in message.text:
