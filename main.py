@@ -118,7 +118,10 @@ async def search(client: Client, message: types.Message):
     try:
         for result in results["result"]:
             index += 1
-            results_message = results_message + f"**[{result["title"]}]({result["link"]})**\n- {result["snippet"]}\n\n"
+            title = result["title"]
+            link = result["link"]
+            snippet = result["snippet"]
+            results_message = results_message + f"**[{title}]({link})**\n- {snippet}\n\n"
             if index == 10: break
         await message.reply(results_message)
     except Exception as e:
