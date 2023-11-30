@@ -17,6 +17,14 @@ api_hash = config.get("API_HASH")
 
 app = Client("my_bot", api_id=api_id, api_hash=api_hash)
 
+@app.on_message(filters.command("start"))
+async def start(client: Client, message: types.Message):
+    await message.reply(f"Hello {message.from_user.first_name}, My name is Shinobi Bot and I'm developed by @Shinobi7k.\nI'm a multipurpose that can help you with various stuff!\nUse /help to learn more about me.")
+
+@app.on_message(filters.command("help"))
+async def help(client: Client, message: types.Message):
+    await message.reply("Whether it's using free AI tools, searching internet or just having fun, I will surely come in handy.\n\nHere's my commands list:\n/bard - Chat with Bard AI\n/imagine - Generate AI images\n/search - Google it without leaving the chat\n/ln - Search Light Novels\n/timer - Set yourself a timer\n/meme - Get a random meme from Reddit\n/dadjoke - Get a random dad joke\n/geekjoke - Get a random geek joke\n/dog - Get a random dog pic/vid/gif\n/slot - A slot game\n/coinflip - Flip a coin\n/reverse - Reverse your words\n/echo - Repeats your words\n/ping - Get bot's latency\n/affirmation - Get a random affirmation\n/advice - Get a random advice\n\n__Developed with 💙 by @Shinobi7k__")
+
 @app.on_message(filters.command("echo"))
 async def echo(client: Client, message: types.Message):
     await message.reply(message.text.replace("/echo ", ""))
@@ -32,20 +40,26 @@ async def ping(client: Client, message: types.Message):
 @app.on_message(filters.command("timer"))
 async def timer(client: Client, message: types.Message):
     time = message.text.replace("/timer ", "").replace("@shinobi7kbot", "").strip()
-    if time == "": return await message.reply("Type time and time unit [s,m,h,d,w,mo,y] correctly.")
+    if time == "": return await message.reply("Type time and time unit (s,m,h,d,w,y).")
     get_time = {
     "s": 1, "m": 60, "h": 3600, "d": 86400,
     "w": 604800, "mo": 2592000, "y": 31104000 }
-    timer = time
-    a = time[-1]
-    b = get_time.get(a)
-    c = time[:-1]
-    try: int(c)
-    except: return await message.reply("Type time and time unit [s,m,h,d,w,mo,y] correctly.")
+    time_unit = time[-1]
+    time_unit_number = get_time.get(time_unit)
+    input_number = time[:-1]
+    try: int(input_number)
+    except: return await message.reply("Type time and time unit (s,m,h,d,w,y) correctly.")
     try:
-        sleep = int(b) * int(c)
-        await message.reply(f"Timer set to {timer}.")
-    except: return await message.reply("Type time and time unit [s,m,h,d,w,mo,y] correctly.")
+        sleep = int(time_unit_number) * int(input_number)
+        if time_unit == "s": time_unit = "seconds"
+        elif time_unit == "m": time_unit = "minutes"
+        elif time_unit == "h": time_unit = "hours"
+        elif time_unit == "d": time_unit = "days"
+        elif time_unit == "w": time_unit = "weeks"
+        elif time_unit == "mo": time_unit = "months"
+        elif time_unit == "y": time_unit = "years"
+        await message.reply(f"Timer set to {input_number} {time_unit}.")
+    except: return await message.reply("Type time and time unit (s,m,h,d,w,y) correctly.")
     await asyncio.sleep(sleep)
     await message.reply("Time over")
 
@@ -186,7 +200,7 @@ async def slot(client: Client, message: types.Message):
 
 @app.on_message(filters.command("coinflip"))
 async def coinflip(client: Client, message: types.Message):
-    coinsides = ['Heads", "Tails']
+    coinsides = ["Heads", "Tails"]
     await message.reply(f"**{message.from_user.first_name}** flipped a coin and got **{random.choice(coinsides)}**!")
 
 @app.on_message(filters.command("meme"))
