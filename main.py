@@ -19,7 +19,7 @@ app = Client("my_bot", api_id=api_id, api_hash=api_hash)
 
 @app.on_message(filters.command("start"))
 async def start(client: Client, message: types.Message):
-    await message.reply(f"Hello {message.from_user.first_name}, My name is Shinobi Bot and I'm developed by @Shinobi7k.\nI'm a multipurpose that can help you with various stuff!\nUse /help to learn more about me.")
+    await message.reply(f"Hello {message.from_user.first_name}, My name is Shin and I'm developed by @Shinobi7k.\nI'm a multipurpose bot that can help you with various stuff!\nUse /help to learn more about me.")
 
 @app.on_message(filters.command("help"))
 async def help(client: Client, message: types.Message):
