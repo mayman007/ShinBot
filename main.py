@@ -24,7 +24,26 @@ async def start(client: Client, message: types.Message):
 
 @app.on_message(filters.command("help"))
 async def help(client: Client, message: types.Message):
-    await message.reply("Whether it's using free AI tools, searching internet or just having fun, I will surely come in handy.\n\nHere's my commands list:\n/bard - Chat with Bard AI\n/imagine - Generate AI images\n/search - Google it without leaving the chat\n/ln - Search Light Novels\n/timer - Set yourself a timer\n/meme - Get a random meme from Reddit\n/dadjoke - Get a random dad joke\n/geekjoke - Get a random geek joke\n/dog - Get a random dog pic/vid/gif\n/slot - A slot game\n/coinflip - Flip a coin\n/reverse - Reverse your words\n/echo - Repeats your words\n/ping - Get bot's latency\n/affirmation - Get a random affirmation\n/advice - Get a random advice\n\n__Developed with 💙 by @Shinobi7k__")
+    await message.reply("""Whether it's using free AI tools, searching internet or just having fun, I will surely come in handy.
+                        \n\nHere's my commands list:
+                        \n/bard - Chat with Bard AI
+                        \n/imagine - Generate AI images
+                        \n/search - Google it without leaving the chat
+                        \n/ln - Search Light Novels
+                        \n/timer - Set yourself a timer
+                        \n/meme - Get a random meme from Reddit
+                        \n/dadjoke - Get a random dad joke
+                        \n/geekjoke - Get a random geek joke
+                        \n/advice - Get a random advice
+                        \n/affirmation - Get a random affirmation
+                        \n/dog - Get a random dog pic/vid/gif
+                        \n/aghpb - Anime girl holding programming book
+                        \n/slot - A slot game
+                        \n/coinflip - Flip a coin
+                        \n/reverse - Reverse your words
+                        \n/echo - Repeats your words
+                        \n/ping - Get bot's latency
+                        \n\n__Developed with 💙 by @Shinobi7k__""")
 
 @app.on_message(filters.command("btn"))
 async def btn(client: Client, message: types.Message):
@@ -46,9 +65,18 @@ async def btn(client: Client, message: types.Message):
 async def start_keyboard(client: Client, message: types.Message):
     await message.reply("btn1")
 
+@app.on_message(filters.command("aghpb"))
+async def aghpb(client: Client, message: types.Message):
+    url = "https://api.devgoldy.xyz/aghpb/v1/random"
+    async with httpx.AsyncClient() as session:
+        response = await session.get(url=url)
+        image_bytes = response.read()
+    with io.BytesIO(image_bytes) as image_file: # converts to file-like object
+        await message.reply_photo(image_file)
+
 @app.on_message(filters.command("echo"))
 async def echo(client: Client, message: types.Message):
-    await message.reply(message.text.replace("/echo ", ""))
+    await message.reply(message.text.replace("/echo ", "").replace("@shinobi7kbot", ""))
 
 @app.on_message(filters.command("ping"))
 async def ping(client: Client, message: types.Message):
@@ -86,7 +114,7 @@ async def timer(client: Client, message: types.Message):
 
 @app.on_message(filters.command("character"))
 async def character(client: Client, message: types.Message):
-    name = message.text.replace("/character", "").strip()
+    name = message.text.replace("/character", "").replace("@shinobi7kbot", "").strip()
     print(name)
     if name == "": return await message.reply("Type character name.")
     waiting_msgs_list = ['Searching for something nice...", "Wait a moment...", "Fetching...']
