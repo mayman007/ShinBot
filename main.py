@@ -81,7 +81,7 @@ async def echo(client: Client, message: types.Message):
 
 @app.on_message(filters.command("ping"))
 async def ping(client: Client, message: types.Message):
-    initial_latency = int(measure_latency(host='google.com')[0])
+    initial_latency = int(measure_latency(host='telegram.org')[0])
     start_time = time.time()
     sent_message = await message.reply("...")
     end_time = time.time()
