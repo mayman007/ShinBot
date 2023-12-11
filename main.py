@@ -9,6 +9,7 @@ import httpx
 from anime_api.apis import NekosAPI
 import praw
 from pykeyboard import InlineKeyboard, InlineButton
+from tcp_latency import measure_latency
 
 # Load variables from the .env file
 config = dotenv_values(".env")
@@ -80,11 +81,12 @@ async def echo(client: Client, message: types.Message):
 
 @app.on_message(filters.command("ping"))
 async def ping(client: Client, message: types.Message):
+    initial_latency = int(measure_latency(host='google.com')[0])
     start_time = time.time()
     sent_message = await message.reply("...")
     end_time = time.time()
-    latency = round((end_time - start_time) * 1000, 2)
-    await sent_message.edit(f"Pong! Latency: {latency}ms")
+    round_latency = int((end_time - start_time) * 1000)
+    await sent_message.edit(f"Pong!\nInitial response: `{initial_latency}ms`\nRound-trip: `{round_latency}ms`")
 
 @app.on_message(filters.command("timer"))
 async def timer(client: Client, message: types.Message):

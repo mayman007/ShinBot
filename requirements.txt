@@ -5,3 +5,4 @@ httpx
 anime-api
 praw
 tgcrypto
+tcp_latency
