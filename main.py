@@ -30,6 +30,7 @@ async def help(client: Client, message: types.Message):
 \nHere's my commands list:
 /bard - Chat with Bard AI
 /imagine - Generate AI images
+/anime - Search for anime from MAL
 /search - Google it without leaving the chat
 /ln - Search Light Novels
 /timer - Set yourself a timer
