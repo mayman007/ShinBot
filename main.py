@@ -75,7 +75,6 @@ async def amime(client: Client, message: types.Message):
                 genres.append(studio["name"])
             genres = str(genres).replace("[", "").replace("]", "").replace("'", "")
             index += 1
-            if index == 5: break
             if trialer == None:
                 buttons = types.InlineKeyboardMarkup(
                 [
@@ -94,6 +93,7 @@ async def amime(client: Client, message: types.Message):
                 ]
                 )
             await message.reply_photo(photo=image_url, reply_markup=buttons, caption=f"**🎗️ Title:** {title}\n**👓 Type:** {the_type}\n**⭐ Score:** {score}\n**📃 Episodes:** {episodes}\n**📅 Year:** {year}\n**🎞️ Genres:** {genres}\n**🏢 Studio:** {studios}\n**🧬 Source:** {source}")
+            if index == 5: break
     if index == 0: await message.reply("No results found.")
 
 @app.on_message(filters.command("aghpb"))
