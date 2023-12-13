@@ -6,10 +6,9 @@ from Bard import AsyncChatbot
 from dotenv import dotenv_values
 import time
 import httpx
-from anime_api.apis import NekosAPI
 import praw
-from pykeyboard import InlineKeyboard, InlineButton
 from tcp_latency import measure_latency
+from jikanpy import AioJikan
 
 # Load variables from the .env file
 config = dotenv_values(".env")
@@ -25,46 +24,75 @@ async def start(client: Client, message: types.Message):
 
 @app.on_message(filters.command("help"))
 async def help(client: Client, message: types.Message):
-    await message.reply("""Whether it's using free AI tools, searching internet or just having fun, I will surely come in handy.
-                        \n\nHere's my commands list:
-                        \n/bard - Chat with Bard AI
-                        \n/imagine - Generate AI images
-                        \n/search - Google it without leaving the chat
-                        \n/ln - Search Light Novels
-                        \n/timer - Set yourself a timer
-                        \n/meme - Get a random meme from Reddit
-                        \n/dadjoke - Get a random dad joke
-                        \n/geekjoke - Get a random geek joke
-                        \n/advice - Get a random advice
-                        \n/affirmation - Get a random affirmation
-                        \n/dog - Get a random dog pic/vid/gif
-                        \n/aghpb - Anime girl holding programming book
-                        \n/slot - A slot game
-                        \n/coinflip - Flip a coin
-                        \n/reverse - Reverse your words
-                        \n/echo - Repeats your words
-                        \n/ping - Get bot's latency
-                        \n\n__Developed with 💙 by @Shinobi7k__""")
+    await message.reply(
+"""Whether it's using free AI tools, searching internet or just having fun, I will surely come in handy.
+\nHere's my commands list:
+/bard - Chat with Bard AI
+/imagine - Generate AI images
+/search - Google it without leaving the chat
+/ln - Search Light Novels
+/timer - Set yourself a timer
+/meme - Get a random meme from Reddit
+/dadjoke - Get a random dad joke
+/geekjoke - Get a random geek joke
+/advice - Get a random advice
+/affirmation - Get a random affirmation
+/dog - Get a random dog pic/vid/gif
+/aghpb - Anime girl holding programming book
+/slot - A slot game
+/coinflip - Flip a coin
+/reverse - Reverse your words
+/echo - Repeats your words
+/ping - Get bot's latency
+\n__Developed with 💙 by @Shinobi7k__"""
+)
 
-@app.on_message(filters.command("btn"))
-async def btn(client: Client, message: types.Message):
-    keyboard = InlineKeyboard(row_width=2)
-    keyboard.add(
-        InlineButton('btn1', 'inline_keyboard:1'),
-        InlineButton('btn2', 'inline_keyboard:2'),
-        InlineButton('btn3', 'inline_keyboard:3'),
-        InlineButton('btn4', 'inline_keyboard:4'),
-        InlineButton('btn5', 'inline_keyboard:5'),
-    )
-    await message.reply("tsts", reply_markup=keyboard)
-#     await client.send_message(
-#     chat_id=message.chat.id,
-#     text=message.reply_markup["sd"]["fef"].text
-# )
-
-@app.on_message(filters.regex('btn1'))
-async def start_keyboard(client: Client, message: types.Message):
-    await message.reply("btn1")
+@app.on_message(filters.command("anime"))
+async def amime(client: Client, message: types.Message):
+    query = message.text.replace("/anime", "").replace("@shinobi7kbot", "").strip()
+    if query == "": return await message.reply("Please provide a search query.")
+    index = 0
+    async with AioJikan() as aio_jikan:
+        results = await aio_jikan.search(search_type='anime', query=query)
+        for result in results['data']:
+            url = result["url"]
+            image_url = result["images"]["jpg"]["image_url"]
+            trialer = result["trailer"]["url"]
+            title = result["title"]
+            source = result["source"]
+            episodes = result["episodes"]
+            the_type = result["type"]
+            year = result["aired"]["prop"]["from"]["year"]
+            score = result["score"]
+            studios = []
+            for studio in result["studios"]:
+                studios.append(studio["name"])
+            studios = str(studios).replace("[", "").replace("]", "").replace("'", "")
+            genres = []
+            for studio in result["genres"]:
+                genres.append(studio["name"])
+            genres = str(genres).replace("[", "").replace("]", "").replace("'", "")
+            index += 1
+            if index == 5: break
+            if trialer == None:
+                buttons = types.InlineKeyboardMarkup(
+                [
+                    [
+                        types.InlineKeyboardButton("Open in MAL", url=url)
+                    ]
+                ]
+                )
+            else:
+                buttons = types.InlineKeyboardMarkup(
+                [
+                    [
+                        types.InlineKeyboardButton("Open in MAL", url=url),
+                        types.InlineKeyboardButton("Trailer", url=trialer)
+                    ]
+                ]
+                )
+            await message.reply_photo(photo=image_url, reply_markup=buttons, caption=f"**🎗️ Title:** {title}\n**👓 Type:** {the_type}\n**⭐ Score:** {score}\n**📃 Episodes:** {episodes}\n**📅 Year:** {year}\n**🎞️ Genres:** {genres}\n**🏢 Studio:** {studios}\n**🧬 Source:** {source}")
+    if index == 0: await message.reply("No results found.")
 
 @app.on_message(filters.command("aghpb"))
 async def aghpb(client: Client, message: types.Message):
@@ -77,7 +105,7 @@ async def aghpb(client: Client, message: types.Message):
 
 @app.on_message(filters.command("echo"))
 async def echo(client: Client, message: types.Message):
-    await message.reply(message.text.replace("/echo ", "").replace("@shinobi7kbot", ""))
+    await message.reply(message.text.replace("/echo", "").replace("@shinobi7kbot", ""))
 
 @app.on_message(filters.command("ping"))
 async def ping(client: Client, message: types.Message):
@@ -90,7 +118,7 @@ async def ping(client: Client, message: types.Message):
 
 @app.on_message(filters.command("timer"))
 async def timer(client: Client, message: types.Message):
-    time = message.text.replace("/timer ", "").replace("@shinobi7kbot", "").strip()
+    time = message.text.replace("/timer", "").replace("@shinobi7kbot", "").strip()
     if time == "": return await message.reply("Type time and time unit (s,m,h,d,w,y).")
     get_time = {
     "s": 1, "m": 60, "h": 3600, "d": 86400,
@@ -114,27 +142,27 @@ async def timer(client: Client, message: types.Message):
     await asyncio.sleep(sleep)
     await message.reply("Time over")
 
-@app.on_message(filters.command("character"))
-async def character(client: Client, message: types.Message):
-    name = message.text.replace("/character", "").replace("@shinobi7kbot", "").strip()
-    print(name)
-    if name == "": return await message.reply("Type character name.")
-    waiting_msgs_list = ['Searching for something nice...", "Wait a moment...", "Fetching...']
-    waiting_msg = await message.reply(random.choice(waiting_msgs_list))
-    nekos = NekosAPI()
-    characters = nekos.get_characters(limit=10, offset=0, search=f"%?{name}%?")
-    for character in characters:
-        print(character)
-        character_ages = ""
-        for age in character.ages:
-            character_ages = f"{character_ages}{age}, "
-        character_ages = character_ages[:-2]
-        character_occupations = ""
-        for occupation in character.occupations:
-            character_occupations = f"{character_occupations}{occupation}, "
-        character_occupations = character_occupations[:-2]
-        await message.reply(f"- **Name:** {character.name}\n- **Source:** {character.source}\n- **Age:** {character_ages} ({character.birth_date})\n- **Gender:** {character.gender}\n- **Nationality:** {character.nationality}\n- **Occupations:** {character_occupations}\n- **Description:** {character.description}")
-    await waiting_msg.delete()
+# @app.on_message(filters.command("character"))
+# async def character(client: Client, message: types.Message):
+#     name = message.text.replace("/character", "").replace("@shinobi7kbot", "").strip()
+#     print(name)
+#     if name == "": return await message.reply("Type character name.")
+#     waiting_msgs_list = ['Searching for something nice...", "Wait a moment...", "Fetching...']
+#     waiting_msg = await message.reply(random.choice(waiting_msgs_list))
+#     nekos = NekosAPI()
+#     characters = nekos.get_characters(limit=10, offset=0, search=f"%?{name}%?")
+#     for character in characters:
+#         print(character)
+#         character_ages = ""
+#         for age in character.ages:
+#             character_ages = f"{character_ages}{age}, "
+#         character_ages = character_ages[:-2]
+#         character_occupations = ""
+#         for occupation in character.occupations:
+#             character_occupations = f"{character_occupations}{occupation}, "
+#         character_occupations = character_occupations[:-2]
+#         await message.reply(f"- **Name:** {character.name}\n- **Source:** {character.source}\n- **Age:** {character_ages} ({character.birth_date})\n- **Gender:** {character.gender}\n- **Nationality:** {character.nationality}\n- **Occupations:** {character_occupations}\n- **Description:** {character.description}")
+    # await waiting_msg.delete()
 
 @app.on_message(filters.command("imagine"))
 async def imagine(client: Client, message: types.Message):

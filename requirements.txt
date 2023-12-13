@@ -2,7 +2,7 @@ pyrogram
 bardapi
 python-dotenv
 httpx
-anime-api
 praw
 tgcrypto
 tcp_latency
+jikanpy
