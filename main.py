@@ -355,7 +355,6 @@ async def bard(client: Client, message: types.Message):
     try:
         bard = await AsyncChatbot.create(BARD_1PSID, BARD_1PSIDCC)
         response = await bard.ask(prompt)
-        print(response)
         images = response['images']
         response = response['content']
         if images != set():
