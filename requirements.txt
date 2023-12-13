@@ -6,3 +6,4 @@ praw
 tgcrypto
 tcp_latency
 jikanpy
+aiohttp

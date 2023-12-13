@@ -1,5 +1,6 @@
 import asyncio
 import io
+import aiohttp
 from pyrogram import Client, filters, types
 import random
 from Bard import AsyncChatbot
@@ -8,7 +9,7 @@ import time
 import httpx
 import praw
 from tcp_latency import measure_latency
-from jikanpy import AioJikan
+# from jikanpy import AioJikan
 
 # Load variables from the .env file
 config = dotenv_values(".env")
@@ -52,8 +53,9 @@ async def amime(client: Client, message: types.Message):
     query = message.text.replace("/anime", "").replace("@shinobi7kbot", "").strip()
     if query == "": return await message.reply("Please provide a search query.")
     index = 0
-    async with AioJikan() as aio_jikan:
-        results = await aio_jikan.search(search_type='anime', query=query)
+    async with aiohttp.ClientSession() as session:
+        async with session.get(f"https://api.jikan.moe/v4/anime?q={query}") as response:
+            results = await response.json()
         for result in results['data']:
             url = result["url"]
             image_url = result["images"]["jpg"]["image_url"]
