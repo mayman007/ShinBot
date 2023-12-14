@@ -30,8 +30,8 @@ async def help(client: Client, message: types.Message):
 \nHere's my commands list:
 /bard - Chat with Bard AI
 /imagine - Generate AI images
-/anime - Search for anime from MAL
 /search - Google it without leaving the chat
+/anime - Search Anime
 /ln - Search Light Novels
 /timer - Set yourself a timer
 /meme - Get a random meme from Reddit
@@ -59,7 +59,7 @@ async def amime(client: Client, message: types.Message):
             results = await response.json()
         for result in results['data']:
             url = result["url"]
-            image_url = result["images"]["jpg"]["image_url"]
+            image_url = result["images"]["jpg"]["large_image_url"]
             trialer = result["trailer"]["url"]
             title = result["title"]
             source = result["source"]
@@ -67,6 +67,10 @@ async def amime(client: Client, message: types.Message):
             the_type = result["type"]
             year = result["aired"]["prop"]["from"]["year"]
             score = result["score"]
+            themes = []
+            for theme in result["themes"]:
+                themes.append(theme["name"])
+            themes = str(themes).replace("[", "").replace("]", "").replace("'", "")
             studios = []
             for studio in result["studios"]:
                 studios.append(studio["name"])
@@ -88,12 +92,14 @@ async def amime(client: Client, message: types.Message):
                 buttons = types.InlineKeyboardMarkup(
                 [
                     [
-                        types.InlineKeyboardButton("Open in MAL", url=url),
-                        types.InlineKeyboardButton("Trailer", url=trialer)
+                        types.InlineKeyboardButton("Open in MAL", url=url)
+                    ],
+                    [
+                        types.InlineKeyboardButton("Watch Trailer", url=trialer)
                     ]
                 ]
                 )
-            await message.reply_photo(photo=image_url, reply_markup=buttons, caption=f"**🎗️ Title:** {title}\n**👓 Type:** {the_type}\n**⭐ Score:** {score}\n**📃 Episodes:** {episodes}\n**📅 Year:** {year}\n**🎞️ Genres:** {genres}\n**🏢 Studio:** {studios}\n**🧬 Source:** {source}")
+            await message.reply_photo(photo=image_url, reply_markup=buttons, caption=f"**🎗️ Title:** {title}\n**👓 Type:** {the_type}\n**⭐ Score:** {score}\n**📃 Episodes:** {episodes}\n**📅 Year:** {year}\n**🎆 Themes: **{themes}\n**🎞️ Genres:** {genres}\n**🏢 Studio:** {studios}\n**🧬 Source:** {source}")
             if index == 5: break
     if index == 0: await message.reply("No results found.")
 
