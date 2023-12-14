@@ -58,9 +58,9 @@ async def help(client: Client, message: types.Message):
 #           [InlineKeyboardButton("Blue", callback_data="blue")]]
 # message_content = "Choose your favorite color!"
 
-@app.on_message(filters.command("ana"))
+@app.on_message(filters.command("anime"))
 async def anime(client: Client, message: types.Message):
-    query = message.text.replace("/ana", "").replace("@shinobi7kbot", "").strip()
+    query = message.text.replace("/anime", "").replace("@shinobi7kbot", "").strip()
     if query == "": return await message.reply("Please provide a search query.")
     index = 0
     anime_results_list = []
