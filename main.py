@@ -3,7 +3,7 @@ import asyncio
 import io
 import aiohttp
 import aiosqlite
-from pyrogram import Client, filters, types
+from pyrogram import Client, filters, types, errors
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 import random
 from Bard import AsyncChatbot
@@ -159,15 +159,7 @@ async def button_click_handler(client: Client, query: types.CallbackQuery):
                 await cursor.execute(f"SELECT * FROM anime WHERE message_id = {query.message.id}") # SELECT * FROM a WHERE id = ?;
                 db_data = await cursor.fetchall()
         current_index = db_data[0][1]
-        ani_list = db_data[0][2].replace("'", "\"").replace("None", "\"None\"")
-        print(ani_list)
-        anime_results_list = ast.literal_eval(ani_list)
-        print("=====================================================")
-        print(anime_results_list)
-        print("=====================================================")
-        print(anime_results_list[1])
-        print("=====================================================")
-        print(anime_results_list[1]['url'])
+        anime_results_list = ast.literal_eval(db_data[0][2].replace("'", "\"").replace("None", "\"None\""))
         if "prev" in data: btn_type = "prev"
         elif "next" in data: btn_type = "next"
         prev_index = 0
@@ -188,11 +180,7 @@ async def button_click_handler(client: Client, query: types.CallbackQuery):
         elif btn_type == "next":
             updated_index = next_index
 
-        print(f"current_index {current_index}")
-        print(f"prev_index {prev_index}")
-        print(f"next_index {next_index}")
-        print(f"btn_type {btn_type}")
-        print(f"updated_index {updated_index}")
+        if updated_index == current_index: return await query.answer()
 
         image_link = anime_results_list[updated_index]['image_url']
         message_content = f"""__**{updated_index + 1}**__
@@ -233,11 +221,6 @@ async def button_click_handler(client: Client, query: types.CallbackQuery):
             ]
         )
 
-    print("==================")
-    print(image_link)
-    print(message_content)
-
-    # Edit message with updated content and keyboard
     await query.message.edit_media(media=types.InputMediaPhoto(media=image_link,caption=message_content))
     await query.message.edit_reply_markup(reply_markup=buttons)
     await query.answer()
