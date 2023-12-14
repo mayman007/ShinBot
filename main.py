@@ -1,7 +1,10 @@
+import ast
 import asyncio
 import io
 import aiohttp
+import aiosqlite
 from pyrogram import Client, filters, types
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 import random
 from Bard import AsyncChatbot
 from dotenv import dotenv_values
@@ -49,59 +52,201 @@ async def help(client: Client, message: types.Message):
 \n__Developed with 💙 by @Shinobi7k__"""
 )
 
-@app.on_message(filters.command("anime"))
-async def amime(client: Client, message: types.Message):
-    query = message.text.replace("/anime", "").replace("@shinobi7kbot", "").strip()
+# # Define initial buttons and message
+# buttons = [[InlineKeyboardButton("Red", callback_data="red"),
+#             InlineKeyboardButton("Green", callback_data="green")],
+#           [InlineKeyboardButton("Blue", callback_data="blue")]]
+# message_content = "Choose your favorite color!"
+
+@app.on_message(filters.command("ana"))
+async def anime(client: Client, message: types.Message):
+    query = message.text.replace("/ana", "").replace("@shinobi7kbot", "").strip()
     if query == "": return await message.reply("Please provide a search query.")
     index = 0
+    anime_results_list = []
     async with aiohttp.ClientSession() as session:
         async with session.get(f"https://api.jikan.moe/v4/anime?q={query}") as response:
             results = await response.json()
-        for result in results['data']:
-            url = result["url"]
-            image_url = result["images"]["jpg"]["large_image_url"]
-            trialer = result["trailer"]["url"]
-            title = result["title"]
-            source = result["source"]
-            episodes = result["episodes"]
-            the_type = result["type"]
-            year = result["aired"]["prop"]["from"]["year"]
-            score = result["score"]
-            themes = []
-            for theme in result["themes"]:
-                themes.append(theme["name"])
-            themes = str(themes).replace("[", "").replace("]", "").replace("'", "")
-            studios = []
-            for studio in result["studios"]:
-                studios.append(studio["name"])
-            studios = str(studios).replace("[", "").replace("]", "").replace("'", "")
-            genres = []
-            for studio in result["genres"]:
-                genres.append(studio["name"])
-            genres = str(genres).replace("[", "").replace("]", "").replace("'", "")
-            index += 1
-            if trialer == None:
-                buttons = types.InlineKeyboardMarkup(
+    for result in results['data']:
+        this_result_dict = {}
+        url = result["url"]
+        this_result_dict['url'] = url
+        image_url = result["images"]["jpg"]["large_image_url"]
+        this_result_dict['image_url'] = image_url
+        trialer = result["trailer"]["url"]
+        this_result_dict['trailer'] = trialer
+        title = result["title"]
+        this_result_dict['title'] = title
+        source = result["source"]
+        this_result_dict['source'] = source
+        episodes = result["episodes"]
+        this_result_dict['episodes'] = episodes
+        the_type = result["type"]
+        this_result_dict['the_type'] = the_type
+        year = result["aired"]["prop"]["from"]["year"]
+        this_result_dict['year'] = year
+        score = result["score"]
+        this_result_dict['score'] = score
+        themes = []
+        for theme in result["themes"]:
+            themes.append(theme["name"])
+        themes = str(themes).replace("[", "").replace("]", "").replace("'", "")
+        this_result_dict['themes'] = themes
+        studios = []
+        for studio in result["studios"]:
+            studios.append(studio["name"])
+        studios = str(studios).replace("[", "").replace("]", "").replace("'", "")
+        this_result_dict['studios'] = studios
+        genres = []
+        for studio in result["genres"]:
+            genres.append(studio["name"])
+        genres = str(genres).replace("[", "").replace("]", "").replace("'", "")
+        this_result_dict['genres'] = genres
+        anime_results_list.append(this_result_dict)
+        index += 1
+        if index == 10: break
+    if anime_results_list[0]['trailer'] == None:
+        buttons = InlineKeyboardMarkup(
+            [
                 [
-                    [
-                        types.InlineKeyboardButton("Open in MAL", url=url)
-                    ]
-                ]
-                )
-            else:
-                buttons = types.InlineKeyboardMarkup(
+                    InlineKeyboardButton("Previews", callback_data=f"animeprev"),
+                    InlineKeyboardButton("Next", callback_data=f"animenext")
+                ],
                 [
-                    [
-                        types.InlineKeyboardButton("Open in MAL", url=url)
-                    ],
-                    [
-                        types.InlineKeyboardButton("Watch Trailer", url=trialer)
-                    ]
+                    InlineKeyboardButton("Open in MAL", url=anime_results_list[0]['url'])
                 ]
-                )
-            await message.reply_photo(photo=image_url, reply_markup=buttons, caption=f"**🎗️ Title:** {title}\n**👓 Type:** {the_type}\n**⭐ Score:** {score}\n**📃 Episodes:** {episodes}\n**📅 Year:** {year}\n**🎆 Themes: **{themes}\n**🎞️ Genres:** {genres}\n**🏢 Studio:** {studios}\n**🧬 Source:** {source}")
-            if index == 5: break
-    if index == 0: await message.reply("No results found.")
+            ]
+        )
+    else:
+        buttons = InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton("Previews", callback_data=f"animeprev"),
+                    InlineKeyboardButton("Next", callback_data=f"animenext")
+                ],
+                [
+                    InlineKeyboardButton("Open in MAL", url=anime_results_list[0]['url'])
+                ],
+                [
+                    InlineKeyboardButton("Watch Trailer", url=anime_results_list[0]['trailer'])
+                ]
+            ]
+        )
+    if index == 0: return await message.reply("No results found.")
+    else: my_msg = await message.reply_photo(photo=anime_results_list[0]['image_url'], reply_markup=buttons,
+caption=f"""__**{1}**__
+**🎗️ Title:** {anime_results_list[0]['title']}
+**👓 Type:** {anime_results_list[0]['the_type']}
+**⭐ Score:** {anime_results_list[0]['score']}
+**📃 Episodes:** {anime_results_list[0]['episodes']}
+**📅 Year:** {anime_results_list[0]['year']}
+**🎆 Themes: **{anime_results_list[0]['themes']}
+**🎞️ Genres:** {anime_results_list[0]['genres']}
+**🏢 Studio:** {anime_results_list[0]['studios']}
+**🧬 Source:** {anime_results_list[0]['source']}""")
+    async with aiosqlite.connect("database.db") as connection:
+        async with connection.cursor() as cursor:
+            await cursor.execute("CREATE TABLE IF NOT EXISTS anime (message_id TEXT, current_index INTEGER, anime_result_list TEXT)")
+            await cursor.execute("INSERT INTO anime (message_id, current_index, anime_result_list) VALUES (?, ?, ?)", (my_msg.id, 0, str(anime_results_list)))
+            await connection.commit()
+
+@app.on_callback_query()
+async def button_click_handler(client: Client, query: types.CallbackQuery):
+    data = query.data
+    if data.startswith("anime"):
+        async with aiosqlite.connect("database.db") as connection:
+            async with connection.cursor() as cursor:
+                await cursor.execute(f"SELECT * FROM anime WHERE message_id = {query.message.id}") # SELECT * FROM a WHERE id = ?;
+                db_data = await cursor.fetchall()
+        current_index = db_data[0][1]
+        ani_list = db_data[0][2].replace("'", "\"").replace("None", "\"None\"")
+        print(ani_list)
+        anime_results_list = ast.literal_eval(ani_list)
+        print("=====================================================")
+        print(anime_results_list)
+        print("=====================================================")
+        print(anime_results_list[1])
+        print("=====================================================")
+        print(anime_results_list[1]['url'])
+        if "prev" in data: btn_type = "prev"
+        elif "next" in data: btn_type = "next"
+        prev_index = 0
+        next_index = 0
+        if current_index == 0:
+            prev_index = 0
+            next_index = 1
+        elif current_index == 7:
+            prev_index = 6
+            next_index = 7
+        else:
+            prev_index = current_index - 1
+            next_index = current_index + 1
+
+        updated_index = 0
+        if btn_type == "prev":
+            updated_index = prev_index
+        elif btn_type == "next":
+            updated_index = next_index
+
+        print(f"current_index {current_index}")
+        print(f"prev_index {prev_index}")
+        print(f"next_index {next_index}")
+        print(f"btn_type {btn_type}")
+        print(f"updated_index {updated_index}")
+
+        image_link = anime_results_list[updated_index]['image_url']
+        message_content = f"""__**{updated_index + 1}**__
+**🎗️ Title:** {anime_results_list[updated_index]['title']}
+**👓 Type:** {anime_results_list[updated_index]['the_type']}
+**⭐ Score:** {anime_results_list[updated_index]['score']}
+**📃 Episodes:** {anime_results_list[updated_index]['episodes']}
+**📅 Year:** {anime_results_list[updated_index]['year']}
+**🎆 Themes: **{anime_results_list[updated_index]['themes']}
+**🎞️ Genres:** {anime_results_list[updated_index]['genres']}
+**🏢 Studio:** {anime_results_list[updated_index]['studios']}
+**🧬 Source:** {anime_results_list[updated_index]['source']}"""
+    if anime_results_list[updated_index]['trailer'] == "None":
+        buttons = InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton("Previews", callback_data=f"animeprev"),
+                    InlineKeyboardButton("Next", callback_data=f"animenext")
+                ],
+                [
+                    InlineKeyboardButton("Open in MAL", url=anime_results_list[updated_index]['url']),
+                ]
+            ]
+        )
+    else:
+        buttons = InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton("Previews", callback_data=f"animeprev"),
+                    InlineKeyboardButton("Next", callback_data=f"animenext")
+                ],
+                [
+                    InlineKeyboardButton("Open in MAL", url=anime_results_list[updated_index]['url']),
+                ],
+                [
+                    InlineKeyboardButton("Watch Trailer", url=anime_results_list[updated_index]['trailer'])
+                ]
+            ]
+        )
+
+    print("==================")
+    print(image_link)
+    print(message_content)
+
+    # Edit message with updated content and keyboard
+    await query.message.edit_media(media=types.InputMediaPhoto(media=image_link,caption=message_content))
+    await query.message.edit_reply_markup(reply_markup=buttons)
+    await query.answer()
+
+    async with aiosqlite.connect("database.db") as connection:
+        async with connection.cursor() as cursor:
+            sql_query = "UPDATE anime SET current_index = ? WHERE message_id = ?"
+            await cursor.execute(sql_query, (updated_index, str(query.message.id)))
+            await connection.commit()
 
 @app.on_message(filters.command("aghpb"))
 async def aghpb(client: Client, message: types.Message):
