@@ -10,10 +10,8 @@ import random
 from Bard import AsyncChatbot
 from dotenv import dotenv_values
 import time
-import httpx
 import praw
 from tcp_latency import measure_latency
-# from jikanpy import AioJikan
 
 # Load variables from the .env file
 config = dotenv_values(".env")
@@ -22,7 +20,6 @@ api_id =  config.get("API_ID")
 api_hash = config.get("API_HASH")
 
 app = Client("my_bot", api_id=api_id, api_hash=api_hash)
-
 
 @app.on_message(filters.command(""))
 async def start(client: Client, message: types.Message):
@@ -473,9 +470,9 @@ async def button_click_handler(client: Client, query: types.CallbackQuery):
 @app.on_message(filters.command("aghpb"))
 async def aghpb(client: Client, message: types.Message):
     url = "https://api.devgoldy.xyz/aghpb/v1/random"
-    async with httpx.AsyncClient() as session:
-        response = await session.get(url=url)
-        image_bytes = response.read()
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            image_bytes = await response.read()
     with io.BytesIO(image_bytes) as image_file: # converts to file-like object
         await message.reply_photo(image_file)
 
@@ -518,49 +515,20 @@ async def timer(client: Client, message: types.Message):
     await asyncio.sleep(sleep)
     await message.reply("Time over")
 
-# @app.on_message(filters.command("character"))
-# async def character(client: Client, message: types.Message):
-#     name = message.text.replace("/character", "").replace("@shinobi7kbot", "").strip()
-#     print(name)
-#     if name == "": return await message.reply("Type character name.")
-#     waiting_msgs_list = ['Searching for something nice...", "Wait a moment...", "Fetching...']
-#     waiting_msg = await message.reply(random.choice(waiting_msgs_list))
-#     nekos = NekosAPI()
-#     characters = nekos.get_characters(limit=10, offset=0, search=f"%?{name}%?")
-#     for character in characters:
-#         print(character)
-#         character_ages = ""
-#         for age in character.ages:
-#             character_ages = f"{character_ages}{age}, "
-#         character_ages = character_ages[:-2]
-#         character_occupations = ""
-#         for occupation in character.occupations:
-#             character_occupations = f"{character_occupations}{occupation}, "
-#         character_occupations = character_occupations[:-2]
-#         await message.reply(f"- **Name:** {character.name}\n- **Source:** {character.source}\n- **Age:** {character_ages} ({character.birth_date})\n- **Gender:** {character.gender}\n- **Nationality:** {character.nationality}\n- **Occupations:** {character_occupations}\n- **Description:** {character.description}")
-    # await waiting_msg.delete()
-
 @app.on_message(filters.command("imagine"))
 async def imagine(client: Client, message: types.Message):
     something_to_imagine = message.text.replace("/imagine", "").replace("@shinobi7kbot", "").strip()
     if something_to_imagine == "": return await message.reply("You have to descripe the image.")
     waiting_msg = await message.reply("Wait a moment...")
-    api_key = config.get("WIBU_API_KEY")
-    url = "https://wibu-api.eu.org/api/ai/midjourney"
-    params = {
-        'query': something_to_imagine,
-        'x_wibu_key': api_key
-    }
-    headers = {
-        'accept': 'application/json',
-        'X-WIBU-Key': api_key
-    }
-    timeout = httpx.Timeout(30.0, connect=60.0)
-    async with httpx.AsyncClient(timeout=timeout) as session:
-        response = await session.get(url=url, headers=headers, params=params)
-    image_bytes = response.read()
-    with io.BytesIO(image_bytes) as image_file: # converts to file-like object
-        await message.reply_photo(image_file)
+    API_URL = "https://api-inference.huggingface.co/models/prompthero/openjourney"
+    API_TOKEN = config.get("HUGGINGFACE_TOKEN")
+    headers = {"Authorization": f"Bearer {API_TOKEN}"}
+    payload = {"inputs": f"{something_to_imagine}, mdjrny-v4 style"}
+    async with aiohttp.ClientSession(headers = headers) as session:
+        async with session.post(API_URL, json = payload) as response:
+            image_bytes =  await response.read()
+    with io.BytesIO(image_bytes) as file:
+        await message.reply_photo(file)
     await waiting_msg.delete()
 
 @app.on_message(filters.command("search"))
@@ -578,10 +546,10 @@ async def search(client: Client, message: types.Message):
         'accept': 'application/json',
         'X-WIBU-Key': api_key
     }
-    timeout = httpx.Timeout(30.0, connect=60.0)
-    async with httpx.AsyncClient(timeout=timeout) as session:
-        response = await session.get(url=url, headers=headers, params=params)
-    results = response.json()
+    timeout =   aiohttp.ClientTimeout(total=None,sock_connect=30,sock_read=30)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with session.get(url=url, headers=headers, params=params) as response:
+            results = await response.json()
     index = 0
     results_message = ""
     try:
@@ -613,10 +581,10 @@ async def ln(client: Client, message: types.Message):
         'accept': 'application/json',
         'X-WIBU-Key': api_key
     }
-    timeout = httpx.Timeout(30.0, connect=60.0)
-    async with httpx.AsyncClient(timeout=timeout) as session:
-        response = await session.get(url=url, headers=headers, params=params)
-    results = response.json()
+    timeout =   aiohttp.ClientTimeout(total=None,sock_connect=30,sock_read=30)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with session.get(url=url, headers=headers, params=params) as response:
+            results = await response.json()
     index = 0
     try:
         for result in results['result']:
@@ -627,15 +595,6 @@ async def ln(client: Client, message: types.Message):
         print(e)
         await message.reply("LN not found.")
     await waiting_msg.delete()
-
-# @app.on_message(filters.command("neko"))
-# async def neko(client: Client, message: types.Message):
-#     waiting_msgs_list = ['Searching for something nice...", "Wait a moment...", "Fetching...']
-#     waiting_msg = await message.reply(random.choice(waiting_msgs_list))
-#     nekos = NekosAPI()
-#     image = nekos.get_random_image(categories=['kemonomimi'])
-#     await message.reply_photo(image.url)
-#     await waiting_msg.delete()
 
 @app.on_message(filters.command("reverse"))
 async def reverse(client: Client, message: types.Message):
@@ -680,25 +639,25 @@ async def meme(client: Client, message: types.Message):
 
 @app.on_message(filters.command("geekjoke"))
 async def geekjoke(client: Client, message: types.Message):
-    async with httpx.AsyncClient() as session:
-        response = await session.get("https://geek-jokes.sameerkumar.website/api?format=json")
-    data = response.json()
+    async with aiohttp.ClientSession() as session:
+        async with session.get("https://geek-jokes.sameerkumar.website/api?format=json") as response:
+            data = await response.json()
     joke = data['joke']
     await message.reply(joke)
 
 @app.on_message(filters.command("dadjoke"))
 async def dadjoke(client: Client, message: types.Message):
-    async with httpx.AsyncClient() as session:
-        response = await session.get("https://icanhazdadjoke.com/slack")
-    data = response.json()
+    async with aiohttp.ClientSession() as session:
+        async with session.get("https://icanhazdadjoke.com/slack") as response:
+            data = await response.json()
     joke = data['attachments'][0]['text']
     await message.reply(joke)
 
 @app.on_message(filters.command("dog"))
 async def dog(client: Client, message: types.Message):
-    async with httpx.AsyncClient() as session:
-        response = await session.get("https://random.dog/woof.json")
-    data = response.json()
+    async with aiohttp.ClientSession() as session:
+        async with session.get("https://random.dog/woof.json") as response:
+            data = await response.json()
     dog_url = data['url']
     if dog_url.endswith(".mp4"): return await message.reply_video(dog_url)
     elif dog_url.endswith(".jpg") or dog_url.endswith(".png"): return await message.reply_photo(dog_url)
@@ -706,17 +665,17 @@ async def dog(client: Client, message: types.Message):
 
 @app.on_message(filters.command("affirmation"))
 async def affirmation(client: Client, message: types.Message):
-    async with httpx.AsyncClient() as session:
-        response = await session.get("https://www.affirmations.dev/")
-    data = response.json()
+    async with aiohttp.ClientSession() as session:
+        async with session.get("https://www.affirmations.dev/") as response:
+            data = await response.json()
     affirmation = data['affirmation']
     await message.reply(affirmation)
 
 @app.on_message(filters.command("advice"))
 async def advice(client: Client, message: types.Message):
-    async with httpx.AsyncClient() as session:
-        response = await session.get("https://api.adviceslip.com/advice")
-    data = response.json()
+    async with aiohttp.ClientSession() as session:
+        async with session.get("https://api.adviceslip.com/advice") as response:
+            data = await response.json(content_type="text/html")
     advice = data['slip']['advice']
     await message.reply(advice)
 

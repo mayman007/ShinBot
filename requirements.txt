@@ -1,8 +1,9 @@
 pyrogram
-bardapi
+tgcrypto
+googlebard
+aiohttp
+aiosqlite
 python-dotenv
 httpx
 praw
-tgcrypto
 tcp_latency
-aiohttp
