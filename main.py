@@ -1,6 +1,7 @@
 import ast
 import asyncio
 import io
+import json
 import aiohttp
 import aiosqlite
 from pyrogram import Client, filters, types, errors
@@ -22,6 +23,11 @@ api_hash = config.get("API_HASH")
 
 app = Client("my_bot", api_id=api_id, api_hash=api_hash)
 
+
+@app.on_message(filters.command(""))
+async def start(client: Client, message: types.Message):
+    print(message.text)
+
 @app.on_message(filters.command("start"))
 async def start(client: Client, message: types.Message):
     await message.reply(f"Hello {message.from_user.first_name}, My name is Shin and I'm developed by @Shinobi7k.\nI'm a multipurpose bot that can help you with various stuff!\nUse /help to learn more about me.")
@@ -35,7 +41,9 @@ async def help(client: Client, message: types.Message):
 /imagine - Generate AI images
 /search - Google it without leaving the chat
 /anime - Search Anime
+/manga - Search Manga
 /ln - Search Light Novels
+/character - Search Anime & Manga characters
 /timer - Set yourself a timer
 /meme - Get a random meme from Reddit
 /dadjoke - Get a random dad joke
@@ -52,11 +60,124 @@ async def help(client: Client, message: types.Message):
 \n__Developed with 💙 by @Shinobi7k__"""
 )
 
-# # Define initial buttons and message
-# buttons = [[InlineKeyboardButton("Red", callback_data="red"),
-#             InlineKeyboardButton("Green", callback_data="green")],
-#           [InlineKeyboardButton("Blue", callback_data="blue")]]
-# message_content = "Choose your favorite color!"
+@app.on_message(filters.command("character"))
+async def character(client: Client, message: types.Message):
+    query = message.text.replace("/character", "").replace("@shinobi7kbot", "").strip()
+    if query == "": return await message.reply("Please provide a search query.")
+    index = 0
+    character_results_list = []
+    async with aiohttp.ClientSession() as session:
+        async with session.get(f"https://api.jikan.moe/v4/characters?q={query}&order_by=favorites&sort=desc") as response:
+            results = await response.json()
+    for result in results['data']:
+        this_result_dict = {}
+        url = result["url"]
+        this_result_dict['url'] = url
+        image_url = result["images"]["jpg"]["image_url"]
+        this_result_dict['image_url'] = image_url
+        name = result["name"]
+        this_result_dict['name'] = name
+        favorites = result["favorites"]
+        this_result_dict['favorites'] = favorites
+        about = result["about"]
+        print(about)
+        if len(str(about)) > 800: about = about[:800] + "..."
+        this_result_dict['about'] = about
+        character_results_list.append(this_result_dict)
+        index += 1
+        if index == 10: break
+        buttons = InlineKeyboardMarkup(
+        [
+            # [
+            #     InlineKeyboardButton("Previous", callback_data=f"characterprev"),
+            #     InlineKeyboardButton("Next", callback_data=f"characternext")
+            # ],
+            [
+                InlineKeyboardButton("Open in MAL", url=character_results_list[0]['url'])
+            ]
+        ]
+    )
+   
+    if index == 0: return await message.reply("No results found.")
+    else: my_msg = await message.reply_photo(photo=character_results_list[0]['image_url'], reply_markup=buttons,
+# caption=f"""__**{1}**__
+caption=f"""
+**🎗️ Name:** {character_results_list[0]['name']}
+**⭐ Favorites:** {character_results_list[0]['favorites']}
+**👓 About:** {character_results_list[0]['about']}""")
+    async with aiosqlite.connect("database.db") as connection:
+        async with connection.cursor() as cursor:
+            await cursor.execute("CREATE TABLE IF NOT EXISTS character (message_id TEXT, current_index INTEGER, character_result_list TEXT)")
+            await cursor.execute("INSERT INTO character (message_id, current_index, character_result_list) VALUES (?, ?, ?)", (my_msg.id, 0, str(character_results_list)))
+            await connection.commit()
+
+
+@app.on_message(filters.command("manga"))
+async def manga(client: Client, message: types.Message):
+    query = message.text.replace("/manga", "").replace("@shinobi7kbot", "").strip()
+    if query == "": return await message.reply("Please provide a search query.")
+    index = 0
+    manga_results_list = []
+    async with aiohttp.ClientSession() as session:
+        async with session.get(f"https://api.jikan.moe/v4/manga?q={query}&order_by=favorites&sort=desc") as response:
+            results = await response.json()
+    for result in results['data']:
+        this_result_dict = {}
+        url = result["url"]
+        this_result_dict['url'] = url
+        image_url = result["images"]["jpg"]["large_image_url"]
+        this_result_dict['image_url'] = image_url
+        title = result["title"]
+        this_result_dict['title'] = title
+        chapters = result["chapters"]
+        this_result_dict['chapters'] = chapters
+        the_type = result["type"]
+        this_result_dict['the_type'] = the_type
+        year = result["published"]["prop"]["from"]["year"]
+        this_result_dict['year'] = year
+        score = result["score"]
+        this_result_dict['score'] = score
+        themes = []
+        for theme in result["themes"]:
+            themes.append(theme["name"])
+        themes = str(themes).replace("[", "").replace("]", "").replace("'", "")
+        this_result_dict['themes'] = themes
+        genres = []
+        for studio in result["genres"]:
+            genres.append(studio["name"])
+        genres = str(genres).replace("[", "").replace("]", "").replace("'", "")
+        this_result_dict['genres'] = genres
+        manga_results_list.append(this_result_dict)
+        index += 1
+        if index == 10: break
+        buttons = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("Previous", callback_data=f"mangaprev"),
+                InlineKeyboardButton("Next", callback_data=f"manganext")
+            ],
+            [
+                InlineKeyboardButton("Open in MAL", url=manga_results_list[0]['url'])
+            ]
+        ]
+    )
+   
+    if index == 0: return await message.reply("No results found.")
+    else: my_msg = await message.reply_photo(photo=manga_results_list[0]['image_url'], reply_markup=buttons,
+caption=f"""__**{1}**__
+**🎗️ Title:** {manga_results_list[0]['title']}
+**👓 Type:** {manga_results_list[0]['the_type']}
+**⭐ Score:** {manga_results_list[0]['score']}
+**📃 Chapters:** {manga_results_list[0]['chapters']}
+**📅 Year:** {manga_results_list[0]['year']}
+**🎆 Themes: **{manga_results_list[0]['themes']}
+**🎞️ Genres:** {manga_results_list[0]['genres']}""")
+    async with aiosqlite.connect("database.db") as connection:
+        async with connection.cursor() as cursor:
+            await cursor.execute("CREATE TABLE IF NOT EXISTS manga (message_id TEXT, current_index INTEGER, manga_result_list TEXT)")
+            await cursor.execute("INSERT INTO manga (message_id, current_index, manga_result_list) VALUES (?, ?, ?)", (my_msg.id, 0, str(manga_results_list)))
+            await connection.commit()
+
 
 @app.on_message(filters.command("anime"))
 async def anime(client: Client, message: types.Message):
@@ -65,7 +186,7 @@ async def anime(client: Client, message: types.Message):
     index = 0
     anime_results_list = []
     async with aiohttp.ClientSession() as session:
-        async with session.get(f"https://api.jikan.moe/v4/anime?q={query}") as response:
+        async with session.get(f"https://api.jikan.moe/v4/anime?q={query}&order_by=favorites&sort=desc") as response:
             results = await response.json()
     for result in results['data']:
         this_result_dict = {}
@@ -167,9 +288,9 @@ async def button_click_handler(client: Client, query: types.CallbackQuery):
         if current_index == 0:
             prev_index = 0
             next_index = 1
-        elif current_index == 7:
-            prev_index = 6
-            next_index = 7
+        elif current_index == 4:
+            prev_index = 3
+            next_index = 4
         else:
             prev_index = current_index - 1
             next_index = current_index + 1
@@ -193,43 +314,161 @@ async def button_click_handler(client: Client, query: types.CallbackQuery):
 **🎞️ Genres:** {anime_results_list[updated_index]['genres']}
 **🏢 Studio:** {anime_results_list[updated_index]['studios']}
 **🧬 Source:** {anime_results_list[updated_index]['source']}"""
-    if anime_results_list[updated_index]['trailer'] == "None":
-        buttons = InlineKeyboardMarkup(
-            [
+        if anime_results_list[updated_index]['trailer'] == "None":
+            buttons = InlineKeyboardMarkup(
                 [
-                    InlineKeyboardButton("Previous", callback_data=f"animeprev"),
-                    InlineKeyboardButton("Next", callback_data=f"animenext")
-                ],
-                [
-                    InlineKeyboardButton("Open in MAL", url=anime_results_list[updated_index]['url']),
+                    [
+                        InlineKeyboardButton("Previous", callback_data=f"animeprev"),
+                        InlineKeyboardButton("Next", callback_data=f"animenext")
+                    ],
+                    [
+                        InlineKeyboardButton("Open in MAL", url=anime_results_list[updated_index]['url']),
+                    ]
                 ]
-            ]
-        )
-    else:
+            )
+        else:
+            buttons = InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton("Previous", callback_data=f"animeprev"),
+                        InlineKeyboardButton("Next", callback_data=f"animenext")
+                    ],
+                    [
+                        InlineKeyboardButton("Open in MAL", url=anime_results_list[updated_index]['url']),
+                    ],
+                    [
+                        InlineKeyboardButton("Watch Trailer", url=anime_results_list[updated_index]['trailer'])
+                    ]
+                ]
+            )
+
+        await query.message.edit_media(media=types.InputMediaPhoto(media=image_link,caption=message_content))
+        await query.message.edit_reply_markup(reply_markup=buttons)
+        await query.answer()
+
+        async with aiosqlite.connect("database.db") as connection:
+            async with connection.cursor() as cursor:
+                sql_query = "UPDATE anime SET current_index = ? WHERE message_id = ?"
+                await cursor.execute(sql_query, (updated_index, str(query.message.id)))
+                await connection.commit()
+
+    elif data.startswith("manga"):
+        async with aiosqlite.connect("database.db") as connection:
+            async with connection.cursor() as cursor:
+                await cursor.execute(f"SELECT * FROM manga WHERE message_id = {query.message.id}") # SELECT * FROM a WHERE id = ?;
+                db_data = await cursor.fetchall()
+        current_index = db_data[0][1]
+        manga_results_list = ast.literal_eval(db_data[0][2].replace("'", "\"").replace("None", "\"None\""))
+        if "prev" in data: btn_type = "prev"
+        elif "next" in data: btn_type = "next"
+        prev_index = 0
+        next_index = 0
+        if current_index == 0:
+            prev_index = 0
+            next_index = 1
+        elif current_index == 4:
+            prev_index = 3
+            next_index = 4
+        else:
+            prev_index = current_index - 1
+            next_index = current_index + 1
+
+        updated_index = 0
+        if btn_type == "prev":
+            updated_index = prev_index
+        elif btn_type == "next":
+            updated_index = next_index
+
+        if updated_index == current_index: return await query.answer()
+
+        image_link = manga_results_list[updated_index]['image_url']
+        message_content = f"""__**{updated_index + 1}**__
+**🎗️ Title:** {manga_results_list[updated_index]['title']}
+**👓 Type:** {manga_results_list[updated_index]['the_type']}
+**⭐ Score:** {manga_results_list[updated_index]['score']}
+**📃 Chapters:** {manga_results_list[updated_index]['chapters']}
+**📅 Year:** {manga_results_list[updated_index]['year']}
+**🎆 Themes: **{manga_results_list[updated_index]['themes']}
+**🎞️ Genres:** {manga_results_list[updated_index]['genres']}"""
         buttons = InlineKeyboardMarkup(
             [
                 [
-                    InlineKeyboardButton("Previous", callback_data=f"animeprev"),
-                    InlineKeyboardButton("Next", callback_data=f"animenext")
+                    InlineKeyboardButton("Previous", callback_data=f"mangaprev"),
+                    InlineKeyboardButton("Next", callback_data=f"manganext")
                 ],
                 [
-                    InlineKeyboardButton("Open in MAL", url=anime_results_list[updated_index]['url']),
-                ],
-                [
-                    InlineKeyboardButton("Watch Trailer", url=anime_results_list[updated_index]['trailer'])
+                    InlineKeyboardButton("Open in MAL", url=manga_results_list[updated_index]['url']),
                 ]
             ]
         )
 
-    await query.message.edit_media(media=types.InputMediaPhoto(media=image_link,caption=message_content))
-    await query.message.edit_reply_markup(reply_markup=buttons)
-    await query.answer()
+        await query.message.edit_media(media=types.InputMediaPhoto(media=image_link,caption=message_content))
+        await query.message.edit_reply_markup(reply_markup=buttons)
+        await query.answer()
 
-    async with aiosqlite.connect("database.db") as connection:
-        async with connection.cursor() as cursor:
-            sql_query = "UPDATE anime SET current_index = ? WHERE message_id = ?"
-            await cursor.execute(sql_query, (updated_index, str(query.message.id)))
-            await connection.commit()
+        async with aiosqlite.connect("database.db") as connection:
+            async with connection.cursor() as cursor:
+                sql_query = "UPDATE manga SET current_index = ? WHERE message_id = ?"
+                await cursor.execute(sql_query, (updated_index, str(query.message.id)))
+                await connection.commit()
+
+    elif data.startswith("character"):
+        async with aiosqlite.connect("database.db") as connection:
+            async with connection.cursor() as cursor:
+                await cursor.execute(f"SELECT * FROM character WHERE message_id = {query.message.id}") # SELECT * FROM a WHERE id = ?;
+                db_data = await cursor.fetchall()
+        current_index = db_data[0][1]
+        print(f"db_data[0][2] {db_data[0][2]}")
+        character_results_list = json.loads(db_data[0][2].replace("'", "\"").replace("None", "\"None\""))
+        if "prev" in data: btn_type = "prev"
+        elif "next" in data: btn_type = "next"
+        prev_index = 0
+        next_index = 0
+        if current_index == 0:
+            prev_index = 0
+            next_index = 1
+        elif current_index == 4:
+            prev_index = 3
+            next_index = 4
+        else:
+            prev_index = current_index - 1
+            next_index = current_index + 1
+
+        updated_index = 0
+        if btn_type == "prev":
+            updated_index = prev_index
+        elif btn_type == "next":
+            updated_index = next_index
+
+        if updated_index == current_index: return await query.answer()
+
+        image_link = character_results_list[updated_index]['image_url']
+        message_content = f"""__**{updated_index + 1}**__
+**🎗️ Title:** {character_results_list[updated_index]['title']}
+**⭐ Favorites:** {character_results_list[updated_index]['favorites']}
+**👓 About:** {character_results_list[updated_index]['about']}"""
+        buttons = InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton("Previous", callback_data=f"characterprev"),
+                    InlineKeyboardButton("Next", callback_data=f"characternext")
+                ],
+                [
+                    InlineKeyboardButton("Open in MAL", url=character_results_list[updated_index]['url']),
+                ]
+            ]
+        )
+
+        await query.message.edit_media(media=types.InputMediaPhoto(media=image_link,caption=message_content))
+        await query.message.edit_reply_markup(reply_markup=buttons)
+        await query.answer()
+
+        async with aiosqlite.connect("database.db") as connection:
+            async with connection.cursor() as cursor:
+                sql_query = "UPDATE character SET current_index = ? WHERE message_id = ?"
+                await cursor.execute(sql_query, (updated_index, str(query.message.id)))
+                await connection.commit()
+
 
 @app.on_message(filters.command("aghpb"))
 async def aghpb(client: Client, message: types.Message):
