@@ -109,7 +109,7 @@ async def anime(client: Client, message: types.Message):
         buttons = InlineKeyboardMarkup(
             [
                 [
-                    InlineKeyboardButton("Previews", callback_data=f"animeprev"),
+                    InlineKeyboardButton("Previous", callback_data=f"animeprev"),
                     InlineKeyboardButton("Next", callback_data=f"animenext")
                 ],
                 [
@@ -121,7 +121,7 @@ async def anime(client: Client, message: types.Message):
         buttons = InlineKeyboardMarkup(
             [
                 [
-                    InlineKeyboardButton("Previews", callback_data=f"animeprev"),
+                    InlineKeyboardButton("Previous", callback_data=f"animeprev"),
                     InlineKeyboardButton("Next", callback_data=f"animenext")
                 ],
                 [
@@ -197,7 +197,7 @@ async def button_click_handler(client: Client, query: types.CallbackQuery):
         buttons = InlineKeyboardMarkup(
             [
                 [
-                    InlineKeyboardButton("Previews", callback_data=f"animeprev"),
+                    InlineKeyboardButton("Previous", callback_data=f"animeprev"),
                     InlineKeyboardButton("Next", callback_data=f"animenext")
                 ],
                 [
@@ -209,7 +209,7 @@ async def button_click_handler(client: Client, query: types.CallbackQuery):
         buttons = InlineKeyboardMarkup(
             [
                 [
-                    InlineKeyboardButton("Previews", callback_data=f"animeprev"),
+                    InlineKeyboardButton("Previous", callback_data=f"animeprev"),
                     InlineKeyboardButton("Next", callback_data=f"animenext")
                 ],
                 [
