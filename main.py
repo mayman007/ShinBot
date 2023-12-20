@@ -66,6 +66,7 @@ async def character(client: Client, message: types.Message):
     async with aiohttp.ClientSession() as session:
         async with session.get(f"https://api.jikan.moe/v4/characters?q={query}&order_by=favorites&sort=desc") as response:
             results = await response.json()
+            print(results)
     for result in results['data']:
         this_result_dict = {}
         url = result["url"]
@@ -690,17 +691,16 @@ async def bard(client: Client, message: types.Message):
         response = await bard.ask(prompt)
         images = response['images']
         response = response['content']
+        images_list = []
         if images != set():
-            bard_images_counter = 0
-            response = f"{response}\n\n"
             for image in images:
-                bard_images_counter += 1
-                response += f"\nImage {bard_images_counter}: {image}"
-        limit = 1800
+                images_list.append(types.InputMediaPhoto(image))
+        limit = 4000
         if len(response) > limit:
             result = [response[i: i + limit] for i in range(0, len(response), limit)]
-            for half in result: await message.reply(f"Bard: {half}")
-        else: await message.reply(f"Bard: {response}")
+            for half in result: msg = await message.reply(f"Bard: {half}")
+        else: msg = await message.reply(f"Bard: {response}")
+        if images_list != []: await message.reply_media_group(media=images_list, reply_to_message_id=msg.id)
     except Exception as e:
         print(f"Bard error: {e}")
         await message.reply("Sorry, an unexpected error had occured.")
@@ -708,10 +708,10 @@ async def bard(client: Client, message: types.Message):
 @app.on_message(filters.text)
 async def message_event(client: Client, message: types.Message):
     # تثبيحات
-    if message.text.startswith("ثبح"): await message.reply("ثباحو")
-    elif message.text.startswith("ثباحو"): await message.reply("ثبح")
-    elif message.text.startswith("مثائو"): await message.reply("مثا")
-    elif message.text.startswith("مثا"): await message.reply("مثائو")
+    if message.text.startswith("ثبح ") or message.text == "ثبح": await message.reply("ثباحو")
+    elif message.text.startswith("ثباحو ") or message.text == "ثباحو": await message.reply("ثبح")
+    elif message.text.startswith("مثائو ") or message.text == "مثائو": await message.reply("مثا")
+    elif message.text.startswith("مثا ") or message.text == "مثا": await message.reply("مثائو")
 
     # يالبوت
     if "يالبوت" in message.text:
