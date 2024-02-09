@@ -1,9 +1,9 @@
 pyrogram
 tgcrypto
-googlebard
 aiohttp
 aiosqlite
 python-dotenv
 httpx
 praw
 tcp_latency
+google-generativeai
