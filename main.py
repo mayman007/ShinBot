@@ -35,7 +35,7 @@ async def help(client: Client, message: types.Message):
     await message.reply(
 """Whether it's using free AI tools, searching internet or just having fun, I will surely come in handy.
 \nHere's my commands list:
-/gemini - Chat with Google's Gemini Pro AI
+/bard - Chat with Bard AI
 /imagine - Generate AI images
 /search - Google it without leaving the chat
 /anime - Search Anime
@@ -705,21 +705,29 @@ async def bard(client: Client, message: types.Message):
     # except Exception as e:
     #     print(f"Bard error: {e}")
     #     await message.reply("Sorry, an unexpected error had occured.")
-    prompt = message.text.replace("/bard", "").replace("@shinobi7kbot", "").strip()
-    api_key = config.get("GEMINI_API_KEY")
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-pro')
-    response = await model.generate_content_async(prompt)
-    await message.reply(f"Gemini Pro: {response.text}")
+    try:
+        prompt = message.text.replace("/bard", "").replace("@shinobi7kbot", "").strip()
+        api_key = config.get("GEMINI_API_KEY")
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-pro')
+        response = await model.generate_content_async(prompt)
+        await message.reply(f"Gemini Pro: {response.text}")
+    except Exception as e:
+        print(f"Gemini error: {e}")
+        await message.reply("Sorry, an unexpected error had occured.")
 
 @app.on_message(filters.command("gemini"))
 async def bard(client: Client, message: types.Message):
-    prompt = message.text.replace("/gemini", "").replace("@shinobi7kbot", "").strip()
-    api_key = config.get("GEMINI_API_KEY")
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-pro')
-    response = await model.generate_content_async(prompt)
-    await message.reply(f"Gemini Pro: {response.text}")
+    try:
+        prompt = message.text.replace("/gemini", "").replace("@shinobi7kbot", "").strip()
+        api_key = config.get("GEMINI_API_KEY")
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-pro')
+        response = await model.generate_content_async(prompt)
+        await message.reply(f"Gemini Pro: {response.text}")
+    except Exception as e:
+        print(f"Gemini error: {e}")
+        await message.reply("Sorry, an unexpected error had occured.")
 
 
 @app.on_message(filters.text)
