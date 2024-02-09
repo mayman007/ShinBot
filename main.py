@@ -12,6 +12,7 @@ from dotenv import dotenv_values
 import time
 import praw
 from tcp_latency import measure_latency
+import google.generativeai as genai
 
 # Load variables from the .env file
 config = dotenv_values(".env")
@@ -34,7 +35,7 @@ async def help(client: Client, message: types.Message):
     await message.reply(
 """Whether it's using free AI tools, searching internet or just having fun, I will surely come in handy.
 \nHere's my commands list:
-/bard - Chat with Bard AI
+/gemini - Chat with Google's Gemini Pro AI
 /imagine - Generate AI images
 /search - Google it without leaving the chat
 /anime - Search Anime
@@ -682,28 +683,44 @@ async def advice(client: Client, message: types.Message):
 
 @app.on_message(filters.command("bard"))
 async def bard(client: Client, message: types.Message):
-    BARD_1PSID = config.get("BARD_1PSID")
-    BARD_1PSIDCC = config.get("BARD_1PSIDCC")
+    # BARD_1PSID = config.get("BARD_1PSID")
+    # BARD_1PSIDCC = config.get("BARD_1PSIDCC")
+    # prompt = message.text.replace("/bard", "").replace("@shinobi7kbot", "").strip()
+    # if prompt == "": return await message.reply("Please write your question on the same message.")
+    # try:
+    #     bard = await AsyncChatbot.create(BARD_1PSID, BARD_1PSIDCC)
+    #     response = await bard.ask(prompt)
+    #     images = response['images']
+    #     response = response['content']
+    #     images_list = []
+    #     if images != set():
+    #         for image in images:
+    #             images_list.append(types.InputMediaPhoto(image))
+    #     limit = 4000
+    #     if len(response) > limit:
+    #         result = [response[i: i + limit] for i in range(0, len(response), limit)]
+    #         for half in result: msg = await message.reply(f"Bard: {half}")
+    #     else: msg = await message.reply(f"Bard: {response}")
+    #     if images_list != []: await message.reply_media_group(media=images_list, reply_to_message_id=msg.id)
+    # except Exception as e:
+    #     print(f"Bard error: {e}")
+    #     await message.reply("Sorry, an unexpected error had occured.")
     prompt = message.text.replace("/bard", "").replace("@shinobi7kbot", "").strip()
-    if prompt == "": return await message.reply("Please write your question on the same message.")
-    try:
-        bard = await AsyncChatbot.create(BARD_1PSID, BARD_1PSIDCC)
-        response = await bard.ask(prompt)
-        images = response['images']
-        response = response['content']
-        images_list = []
-        if images != set():
-            for image in images:
-                images_list.append(types.InputMediaPhoto(image))
-        limit = 4000
-        if len(response) > limit:
-            result = [response[i: i + limit] for i in range(0, len(response), limit)]
-            for half in result: msg = await message.reply(f"Bard: {half}")
-        else: msg = await message.reply(f"Bard: {response}")
-        if images_list != []: await message.reply_media_group(media=images_list, reply_to_message_id=msg.id)
-    except Exception as e:
-        print(f"Bard error: {e}")
-        await message.reply("Sorry, an unexpected error had occured.")
+    api_key = config.get("GEMINI_API_KEY")
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel('gemini-pro')
+    response = await model.generate_content_async(prompt)
+    await message.reply(f"Gemini Pro: {response.text}")
+
+@app.on_message(filters.command("gemini"))
+async def bard(client: Client, message: types.Message):
+    prompt = message.text.replace("/gemini", "").replace("@shinobi7kbot", "").strip()
+    api_key = config.get("GEMINI_API_KEY")
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel('gemini-pro')
+    response = await model.generate_content_async(prompt)
+    await message.reply(f"Gemini Pro: {response.text}")
+
 
 @app.on_message(filters.text)
 async def message_event(client: Client, message: types.Message):
