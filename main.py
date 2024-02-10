@@ -712,7 +712,7 @@ async def bard(client: Client, message: types.Message):
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-pro')
         response = await model.generate_content_async(prompt)
-        await message.reply(f"Gemini Pro: {response.text}")
+        await message.reply(f"Gemini Pro: {response.text}\n\n Note: This command is now deprecated. Consider using /gemini instead.")
     except Exception as e:
         print(f"Gemini error: {e}")
         await message.reply("Sorry, an unexpected error had occured.")
