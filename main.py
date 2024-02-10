@@ -35,7 +35,7 @@ async def help(client: Client, message: types.Message):
     await message.reply(
 """Whether it's using free AI tools, searching internet or just having fun, I will surely come in handy.
 \nHere's my commands list:
-/bard - Chat with Bard AI
+/gemini - Chat with Google's Gemini Pro AI
 /imagine - Generate AI images
 /search - Google it without leaving the chat
 /anime - Search Anime
@@ -707,6 +707,7 @@ async def bard(client: Client, message: types.Message):
     #     await message.reply("Sorry, an unexpected error had occured.")
     try:
         prompt = message.text.replace("/bard", "").replace("@shinobi7kbot", "").strip()
+        if prompt == "": return await message.reply("Please write your question on the same message.")
         api_key = config.get("GEMINI_API_KEY")
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-pro')
@@ -720,6 +721,7 @@ async def bard(client: Client, message: types.Message):
 async def bard(client: Client, message: types.Message):
     try:
         prompt = message.text.replace("/gemini", "").replace("@shinobi7kbot", "").strip()
+        if prompt == "": return await message.reply("Please write your question on the same message.")
         api_key = config.get("GEMINI_API_KEY")
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-pro')
