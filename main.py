@@ -712,7 +712,14 @@ async def bard(client: Client, message: types.Message):
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-pro')
         response = await model.generate_content_async(prompt)
-        await message.reply(f"Gemini Pro: {response.text}\n\n Note: This command is now deprecated. Consider using /gemini instead.")
+        response = response.text
+        limit = 4000
+        if len(response) > limit:
+            result = [response[i: i + limit] for i in range(0, len(response), limit)]
+            for half in result:
+                await message.reply(f"Gemini Pro: {half}")
+                await asyncio.sleep(0.5)
+        else: await message.reply(f"Gemini Pro: {response}\n\n Note: This command is now deprecated. Consider using /gemini instead.")
     except Exception as e:
         print(f"Gemini error: {e}")
         await message.reply("Sorry, an unexpected error had occured.")
@@ -726,7 +733,14 @@ async def bard(client: Client, message: types.Message):
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-pro')
         response = await model.generate_content_async(prompt)
-        await message.reply(f"Gemini Pro: {response.text}")
+        response = response.text
+        limit = 4000
+        if len(response) > limit:
+            result = [response[i: i + limit] for i in range(0, len(response), limit)]
+            for half in result:
+                await message.reply(f"Gemini Pro: {half}")
+                await asyncio.sleep(0.5)
+        else: await message.reply(f"Gemini Pro: {response}")
     except Exception as e:
         print(f"Gemini error: {e}")
         await message.reply("Sorry, an unexpected error had occured.")
