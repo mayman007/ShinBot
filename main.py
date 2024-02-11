@@ -776,7 +776,7 @@ async def bard(client: Client, message: types.Message):
             conversation_style=convo_style,
             simplify_response=True
         )
-        response_text = f"Bing{string_style}: {response["text"]}"
+        response_text = f"Bing{string_style}: {response['text']}"
         web_search_results_bool = False
         if '"web_search_results":' in response_text:
             try:
