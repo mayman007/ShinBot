@@ -13,6 +13,8 @@ import time
 import praw
 from tcp_latency import measure_latency
 import google.generativeai as genai
+from pathlib import Path
+from re_edge_gpt import Chatbot, ConversationStyle
 
 # Load variables from the .env file
 config = dotenv_values(".env")
@@ -36,6 +38,7 @@ async def help(client: Client, message: types.Message):
 """Whether it's using free AI tools, searching internet or just having fun, I will surely come in handy.
 \nHere's my commands list:
 /gemini - Chat with Google's Gemini Pro AI
+/bing - Chat with Bing GPT-4 AI
 /imagine - Generate AI images
 /search - Google it without leaving the chat
 /anime - Search Anime
@@ -744,6 +747,71 @@ async def bard(client: Client, message: types.Message):
     except Exception as e:
         print(f"Gemini error: {e}")
         await message.reply("Sorry, an unexpected error had occured.")
+
+@app.on_message(filters.command("bing"))
+async def bard(client: Client, message: types.Message):
+    prompt = message.text.replace("/bing", "").replace("@shinobi7kbot", "").strip()
+    if prompt.lower().startswith("creative"):
+        convo_style = ConversationStyle.creative
+        string_style = " Creative"
+        prompt = prompt.replace("creative", "", 1)
+    elif prompt.lower().startswith("balanced"):
+        convo_style = ConversationStyle.balanced
+        string_style = " Balanced"
+        prompt = prompt.replace("balanced", "", 1)
+    elif prompt.lower().startswith("precise"):
+        convo_style = ConversationStyle.precise
+        string_style = " Precise"
+        prompt = prompt.replace("precise", "", 1)
+    else:
+        convo_style = ConversationStyle.balanced
+        string_style = ""
+        prompt=prompt
+    bot = None
+    try:
+        with open(Path.cwd() / "bing_cookies.json", encoding="utf-8") as file: cookies = json.load(file)
+        bot = await Chatbot.create(cookies=cookies)
+        response = await bot.ask(
+            prompt=prompt,
+            conversation_style=convo_style,
+            simplify_response=True
+        )
+        response_text = f"Bing{string_style}: {response["text"]}"
+        web_search_results_bool = False
+        if '"web_search_results":' in response_text:
+            try:
+                web_search_results = json.loads(response_text.split('"web_search_results":')[1].split('"}]}')[0] + '"}]')
+                web_search_results_text = "**Web Search Results:**\n"
+                for result in web_search_results:
+                    web_search_results_text += f"\n**[{result['title']}]({result['url']})**\n"
+                    for snippit in result["snippets"]:
+                        if len(snippit) > 80: snippit = snippit[:77] + "..."
+                        web_search_results_text += f"- {snippit}\n"
+                web_search_results_bool = True
+            except Exception as e:
+                print(f"Bing web_search_results error: {e}")
+            response_text = response_text.split("Generating answers for you... ")[0]
+        if response["source_keys"] != []:
+            index = 0
+            response_text += "\n\n**Sources:**"
+            for source in response["source_keys"]:
+                response_text += f"\n- [{source}]({response['source_values'][index]})"
+                index = +1
+        limit = 4000
+        if len(response_text) > limit:
+            result = [response_text[i: i + limit] for i in range(0, len(response_text), limit)]
+            for half in result:
+                await message.reply(half)
+                await asyncio.sleep(0.5)
+        else: await message.reply(response_text)
+        if web_search_results_bool: await message.reply(web_search_results_text)
+        # assert response
+    except Exception as error:
+        print(f"response_text {response_text}")
+        raise error
+    finally:
+        if bot is not None:
+            await bot.close()
 
 
 @app.on_message(filters.text)

@@ -7,3 +7,4 @@ httpx
 praw
 tcp_latency
 google-generativeai
+re_edge_gpt
