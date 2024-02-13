@@ -174,7 +174,7 @@ async def manga(client: Client, message: types.Message):
         async with session.get(f"https://api.jikan.moe/v4/manga?q={query}&order_by=favorites&sort=desc&sfw=true") as response:
             results = await response.json()
     for result in results['data']:
-        if "Hentai" in str(result["genres"]) or "Ecchi" in str(result["genres"]): continue
+        if "Hentai" in str(result["genres"]) or "Ecchi" in str(result["genres"]) or "Erotica" in str(result["genres"]): continue
         this_result_dict = {}
         url = result["url"]
         this_result_dict['url'] = url
@@ -245,7 +245,7 @@ async def anime(client: Client, message: types.Message):
         async with session.get(f"https://api.jikan.moe/v4/anime?q={query}&order_by=favorites&sort=desc&sfw=true") as response:
             results = await response.json()
     for result in results['data']:
-        if "Hentai" in str(result["genres"]) or "Ecchi" in str(result["genres"]): continue
+        if "Hentai" in str(result["genres"]) or "Ecchi" in str(result["genres"]) or "Erotica" in str(result["genres"]): continue
         this_result_dict = {}
         url = result["url"]
         this_result_dict['url'] = url
