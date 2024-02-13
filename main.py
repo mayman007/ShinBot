@@ -121,9 +121,10 @@ async def manga(client: Client, message: types.Message):
     index = 0
     manga_results_list = []
     async with aiohttp.ClientSession() as session:
-        async with session.get(f"https://api.jikan.moe/v4/manga?q={query}&order_by=favorites&sort=desc") as response:
+        async with session.get(f"https://api.jikan.moe/v4/manga?q={query}&order_by=favorites&sort=desc&sfw=true") as response:
             results = await response.json()
     for result in results['data']:
+        if "Hentai" in str(result["genres"]) or "Ecchi" in str(result["genres"]): continue
         this_result_dict = {}
         url = result["url"]
         this_result_dict['url'] = url
@@ -145,8 +146,8 @@ async def manga(client: Client, message: types.Message):
         themes = str(themes).replace("[", "").replace("]", "").replace("'", "")
         this_result_dict['themes'] = themes
         genres = []
-        for studio in result["genres"]:
-            genres.append(studio["name"])
+        for genre in result["genres"]:
+            genres.append(genre["name"])
         genres = str(genres).replace("[", "").replace("]", "").replace("'", "")
         this_result_dict['genres'] = genres
         manga_results_list.append(this_result_dict)
@@ -188,9 +189,10 @@ async def anime(client: Client, message: types.Message):
     index = 0
     anime_results_list = []
     async with aiohttp.ClientSession() as session:
-        async with session.get(f"https://api.jikan.moe/v4/anime?q={query}&order_by=favorites&sort=desc") as response:
+        async with session.get(f"https://api.jikan.moe/v4/anime?q={query}&order_by=favorites&sort=desc&sfw=true") as response:
             results = await response.json()
     for result in results['data']:
+        if "Hentai" in str(result["genres"]) or "Ecchi" in str(result["genres"]): continue
         this_result_dict = {}
         url = result["url"]
         this_result_dict['url'] = url
@@ -221,8 +223,8 @@ async def anime(client: Client, message: types.Message):
         studios = str(studios).replace("[", "").replace("]", "").replace("'", "")
         this_result_dict['studios'] = studios
         genres = []
-        for studio in result["genres"]:
-            genres.append(studio["name"])
+        for genre in result["genres"]:
+            genres.append(genre["name"])
         genres = str(genres).replace("[", "").replace("]", "").replace("'", "")
         this_result_dict['genres'] = genres
         anime_results_list.append(this_result_dict)
