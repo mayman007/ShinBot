@@ -4,10 +4,9 @@ import io
 import json
 import aiohttp
 import aiosqlite
-from pyrogram import Client, filters, types, errors
+from pyrogram import Client, filters, types, errors, enums
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 import random
-from Bard import AsyncChatbot
 from dotenv import dotenv_values
 import time
 import praw
@@ -24,9 +23,48 @@ api_hash = config.get("API_HASH")
 
 app = Client("my_bot", api_id=api_id, api_hash=api_hash)
 
-@app.on_message(filters.command(""))
-async def start(client: Client, message: types.Message):
-    print(message.text)
+# Save Commands Usage in Database
+async def save_usage(chat_object: dict, command_name: str):
+    if chat_object.type == enums.ChatType.GROUP or chat_object.type == enums.ChatType.SUPERGROUP:
+        chat_id = str(chat_object.id)
+        chat_name = str(chat_object.title)
+        chat_type = str(chat_object.type)
+        chat_members = str(chat_object.members_count)
+        chat_invite = str(chat_object.invite_link)
+    elif chat_object.type == enums.ChatType.PRIVATE or chat_object.type == enums.ChatType.BOT:
+        chat_id = str(chat_object.id)
+        chat_name = str(chat_object.username)
+        chat_type = str(chat_object.type)
+        chat_members = str("_")
+        chat_invite = str(chat_object.invite_link)
+    async with aiosqlite.connect("usage.db") as connection:
+        async with connection.cursor() as cursor:
+            await cursor.execute(f"CREATE TABLE IF NOT EXISTS {command_name} (id TEXT, name TEXT, usage INTEGER, type TEXT, members TEXT, invite TEXT)")
+            cursor = await cursor.execute(f"SELECT * FROM {command_name} WHERE id = ?", (chat_id,))
+            row = await cursor.fetchone()
+            if row == None: await cursor.execute(f"INSERT INTO {command_name} (id, name, usage, type, members, invite) VALUES (?, ?, ?, ?, ?, ?)", (chat_id, chat_name, 1, chat_type, chat_members, chat_invite,))
+            else: await cursor.execute(f"UPDATE {command_name} SET usage = ? WHERE id = ?", (row[2] + 1, chat_id))
+            await connection.commit()
+
+@app.on_message(filters.command("usagedata"))
+async def get_usage_data(client: Client, message: types.Message):
+    if message.from_user.id == 1201645998:
+        async with aiosqlite.connect("usage.db") as connection:
+            async with connection.cursor() as cursor:
+                data = await cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+                tables = await data.fetchall()
+                data_message = "Here is all the usage data!\n"
+                for table in tables:
+                    table_name = table[0]
+                    data_message += "===================\n\n"
+                    data_message += f"**{table_name}**\n"
+                    data = await cursor.execute(f"SELECT * FROM {table_name};")
+                    rows = await data.fetchall()
+                    for row in rows:
+                        data_message += f"- Chat ID: {row[0]}\n- Chat Name: **{row[1]}**\n- Usage Count: **{row[2]}**\n- Chat Type: {row[3]}\n- Chat Members: {row[4]}\n- Chat Invite: {row[5]}\n\n"
+        await message.reply(data_message)
+    else:
+        await message.reply("You")
 
 @app.on_message(filters.command("start"))
 async def start(client: Client, message: types.Message):
@@ -63,6 +101,9 @@ async def help(client: Client, message: types.Message):
 
 @app.on_message(filters.command("character"))
 async def character(client: Client, message: types.Message):
+    chat_object = await client.get_chat(message.chat.id)
+    await save_usage(chat_object, "character")
+
     query = message.text.replace("/character", "").replace("@shinobi7kbot", "").strip()
     if query == "": return await message.reply("Please provide a search query.")
     index = 0
@@ -116,6 +157,9 @@ caption=f"""
 
 @app.on_message(filters.command("manga"))
 async def manga(client: Client, message: types.Message):
+    chat_object = await client.get_chat(message.chat.id)
+    await save_usage(chat_object, "manga")
+
     query = message.text.replace("/manga", "").replace("@shinobi7kbot", "").strip()
     if query == "": return await message.reply("Please provide a search query.")
     index = 0
@@ -184,6 +228,9 @@ caption=f"""__**{1}**__
 
 @app.on_message(filters.command("anime"))
 async def anime(client: Client, message: types.Message):
+    chat_object = await client.get_chat(message.chat.id)
+    await save_usage(chat_object, "anime")
+
     query = message.text.replace("/anime", "").replace("@shinobi7kbot", "").strip()
     if query == "": return await message.reply("Please provide a search query.")
     index = 0
@@ -476,6 +523,9 @@ async def button_click_handler(client: Client, query: types.CallbackQuery):
 
 @app.on_message(filters.command("aghpb"))
 async def aghpb(client: Client, message: types.Message):
+    chat_object = await client.get_chat(message.chat.id)
+    await save_usage(chat_object, "aghpb")
+
     url = "https://api.devgoldy.xyz/aghpb/v1/random"
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as response:
@@ -485,10 +535,16 @@ async def aghpb(client: Client, message: types.Message):
 
 @app.on_message(filters.command("echo"))
 async def echo(client: Client, message: types.Message):
+    chat_object = await client.get_chat(message.chat.id)
+    await save_usage(chat_object, "echo")
+
     await message.reply(message.text.replace("/echo", "").replace("@shinobi7kbot", ""))
 
 @app.on_message(filters.command("ping"))
 async def ping(client: Client, message: types.Message):
+    chat_object = await client.get_chat(message.chat.id)
+    await save_usage(chat_object, "ping")
+
     initial_latency = int(measure_latency(host='telegram.org')[0])
     start_time = time.time()
     sent_message = await message.reply("...")
@@ -498,6 +554,9 @@ async def ping(client: Client, message: types.Message):
 
 @app.on_message(filters.command("timer"))
 async def timer(client: Client, message: types.Message):
+    chat_object = await client.get_chat(message.chat.id)
+    await save_usage(chat_object, "timer")
+
     time = message.text.replace("/timer", "").replace("@shinobi7kbot", "").strip()
     if time == "": return await message.reply("Type time and time unit (s,m,h,d,w,y).")
     get_time = {
@@ -524,6 +583,9 @@ async def timer(client: Client, message: types.Message):
 
 @app.on_message(filters.command("imagine"))
 async def imagine(client: Client, message: types.Message):
+    chat_object = await client.get_chat(message.chat.id)
+    await save_usage(chat_object, "imagine")
+
     something_to_imagine = message.text.replace("/imagine", "").replace("@shinobi7kbot", "").strip()
     if something_to_imagine == "": return await message.reply("You have to descripe the image.")
     waiting_msg = await message.reply("Wait a moment...")
@@ -540,6 +602,9 @@ async def imagine(client: Client, message: types.Message):
 
 @app.on_message(filters.command("search"))
 async def search(client: Client, message: types.Message):
+    chat_object = await client.get_chat(message.chat.id)
+    await save_usage(chat_object, "search")
+
     something_to_search = message.text.replace("/search", "").replace("@shinobi7kbot", "").strip()
     if something_to_search == "": return await message.reply("Type something to search.")
     waiting_msg = await message.reply("Wait a moment...")
@@ -575,6 +640,9 @@ async def search(client: Client, message: types.Message):
 
 @app.on_message(filters.command("ln"))
 async def ln(client: Client, message: types.Message):
+    chat_object = await client.get_chat(message.chat.id)
+    await save_usage(chat_object, "ln")
+
     ln_name = message.text.replace("/ln", "").replace("@shinobi7kbot", "").strip()
     if ln_name == "": return await message.reply("Type LN title.")
     waiting_msg = await message.reply("Wait a moment...")
@@ -605,6 +673,9 @@ async def ln(client: Client, message: types.Message):
 
 @app.on_message(filters.command("reverse"))
 async def reverse(client: Client, message: types.Message):
+    chat_object = await client.get_chat(message.chat.id)
+    await save_usage(chat_object, "reverse")
+
     your_words = message.text.replace("/reverse", "").replace("@shinobi7kbot", "").strip()
     if your_words == "": return await message.reply("Type some words.")
     t_rev = your_words[::-1].replace("@", "@\u200B").replace("&", "&\u200B")
@@ -612,6 +683,9 @@ async def reverse(client: Client, message: types.Message):
 
 @app.on_message(filters.command("slot"))
 async def slot(client: Client, message: types.Message):
+    chat_object = await client.get_chat(message.chat.id)
+    await save_usage(chat_object, "slot")
+
     emojis = "🍎🍊🍐🍋🍉🍇🍓🍒"
     a, b, c = [random.choice(emojis) for g in range(3)]
     slotmachine = f"**[ {a} {b} {c} ]\n{message.from_user.first_name}**,"
@@ -621,11 +695,17 @@ async def slot(client: Client, message: types.Message):
 
 @app.on_message(filters.command("coinflip"))
 async def coinflip(client: Client, message: types.Message):
+    chat_object = await client.get_chat(message.chat.id)
+    await save_usage(chat_object, "coinflip")
+
     coinsides = ["Heads", "Tails"]
     await message.reply(f"**{message.from_user.first_name}** flipped a coin and got **{random.choice(coinsides)}**!")
 
 @app.on_message(filters.command("meme"))
 async def meme(client: Client, message: types.Message):
+    chat_object = await client.get_chat(message.chat.id)
+    await save_usage(chat_object, "meme")
+
     reddit = praw.Reddit(
         client_id = config.get("REDDIT_CLIENT_ID"),
         client_secret = config.get("REDDIT_CLIENT_SECRET"),
@@ -646,6 +726,9 @@ async def meme(client: Client, message: types.Message):
 
 @app.on_message(filters.command("geekjoke"))
 async def geekjoke(client: Client, message: types.Message):
+    chat_object = await client.get_chat(message.chat.id)
+    await save_usage(chat_object, "geekjoke")
+
     async with aiohttp.ClientSession() as session:
         async with session.get("https://geek-jokes.sameerkumar.website/api?format=json") as response:
             data = await response.json()
@@ -654,6 +737,9 @@ async def geekjoke(client: Client, message: types.Message):
 
 @app.on_message(filters.command("dadjoke"))
 async def dadjoke(client: Client, message: types.Message):
+    chat_object = await client.get_chat(message.chat.id)
+    await save_usage(chat_object, "dadjoke")
+
     async with aiohttp.ClientSession() as session:
         async with session.get("https://icanhazdadjoke.com/slack") as response:
             data = await response.json()
@@ -662,6 +748,9 @@ async def dadjoke(client: Client, message: types.Message):
 
 @app.on_message(filters.command("dog"))
 async def dog(client: Client, message: types.Message):
+    chat_object = await client.get_chat(message.chat.id)
+    await save_usage(chat_object, "dog")
+
     async with aiohttp.ClientSession() as session:
         async with session.get("https://random.dog/woof.json") as response:
             data = await response.json()
@@ -672,6 +761,9 @@ async def dog(client: Client, message: types.Message):
 
 @app.on_message(filters.command("affirmation"))
 async def affirmation(client: Client, message: types.Message):
+    chat_object = await client.get_chat(message.chat.id)
+    await save_usage(chat_object, "affirmation")
+
     async with aiohttp.ClientSession() as session:
         async with session.get("https://www.affirmations.dev/") as response:
             data = await response.json()
@@ -680,6 +772,9 @@ async def affirmation(client: Client, message: types.Message):
 
 @app.on_message(filters.command("advice"))
 async def advice(client: Client, message: types.Message):
+    chat_object = await client.get_chat(message.chat.id)
+    await save_usage(chat_object, "advice")
+
     async with aiohttp.ClientSession() as session:
         async with session.get("https://api.adviceslip.com/advice") as response:
             data = await response.json(content_type="text/html")
@@ -688,6 +783,9 @@ async def advice(client: Client, message: types.Message):
 
 @app.on_message(filters.command("bard"))
 async def bard(client: Client, message: types.Message):
+    chat_object = await client.get_chat(message.chat.id)
+    await save_usage(chat_object, "bard")
+
     # BARD_1PSID = config.get("BARD_1PSID")
     # BARD_1PSIDCC = config.get("BARD_1PSIDCC")
     # prompt = message.text.replace("/bard", "").replace("@shinobi7kbot", "").strip()
@@ -731,6 +829,9 @@ async def bard(client: Client, message: types.Message):
 
 @app.on_message(filters.command("gemini"))
 async def bard(client: Client, message: types.Message):
+    chat_object = await client.get_chat(message.chat.id)
+    await save_usage(chat_object, "gemini")
+
     try:
         prompt = message.text.replace("/gemini", "").replace("@shinobi7kbot", "").strip()
         if prompt == "": return await message.reply("Please write your question on the same message.")
@@ -752,6 +853,9 @@ async def bard(client: Client, message: types.Message):
 
 @app.on_message(filters.command("bing"))
 async def bard(client: Client, message: types.Message):
+    chat_object = await client.get_chat(message.chat.id)
+    await save_usage(chat_object, "bing")
+
     prompt = message.text.replace("/bing", "").replace("@shinobi7kbot", "").strip()
     if prompt.lower().startswith("creative"):
         convo_style = ConversationStyle.creative
