@@ -794,9 +794,11 @@ async def bard(client: Client, message: types.Message):
         if response["source_keys"] != []:
             index = 0
             response_text += "\n\n**Sources:**"
-            for source in response["source_keys"]:
-                response_text += f"\n- [{source}]({response['source_values'][index]})"
-                index = +1
+            for source_key in response["source_keys"]:
+                source_url = response['source_values'][index]
+                index += 1
+                if source_key == "": response_text += f"\n- {source_url}"
+                else: response_text += f"\n- [{source_key}]({source_url})"
         limit = 4000
         if len(response_text) > limit:
             result = [response_text[i: i + limit] for i in range(0, len(response_text), limit)]
