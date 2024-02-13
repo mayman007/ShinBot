@@ -62,9 +62,15 @@ async def get_usage_data(client: Client, message: types.Message):
                     rows = await data.fetchall()
                     for row in rows:
                         data_message += f"- Chat ID: {row[0]}\n- Chat Name: **{row[1]}**\n- Usage Count: **{row[2]}**\n- Chat Type: {row[3]}\n- Chat Members: {row[4]}\n- Chat Invite: {row[5]}\n\n"
-        await message.reply(data_message)
+        limit = 3800
+        if len(data_message) > limit:
+            result = [data_message[i: i + limit] for i in range(0, len(data_message), limit)]
+            for half in result:
+                await message.reply(half)
+                await asyncio.sleep(0.5)
+        else: await message.reply(data_message)
     else:
-        await message.reply("You")
+        await message.reply("You're not allowed to use this command")
 
 @app.on_message(filters.command("start"))
 async def start(client: Client, message: types.Message):
