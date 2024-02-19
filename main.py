@@ -563,8 +563,14 @@ async def timer(client: Client, message: types.Message):
     chat_object = await client.get_chat(message.chat.id)
     await save_usage(chat_object, "timer")
 
-    time = message.text.replace("/timer", "").replace("@shinobi7kbot", "").strip()
-    if time == "": return await message.reply("Type time and time unit (s,m,h,d,w,y).")
+    message_text = message.text.replace("/timer", "").replace("@shinobi7kbot", "").strip()
+    if " " in message_text:
+        reason = message_text.split(" ", 1)[1]
+        time = message_text.split(" ", 1)[0]
+    else:
+        time = message_text
+
+    if time == "": return await message.reply("Type time and time unit (s, m, h, d, w, y) correctly\nFor example: `/timer 30m remind me of studying`")
     get_time = {
     "s": 1, "m": 60, "h": 3600, "d": 86400,
     "w": 604800, "mo": 2592000, "y": 31104000 }
@@ -572,7 +578,7 @@ async def timer(client: Client, message: types.Message):
     time_unit_number = get_time.get(time_unit)
     input_number = time[:-1]
     try: int(input_number)
-    except: return await message.reply("Type time and time unit (s,m,h,d,w,y) correctly.")
+    except: return await message.reply("Type time and time unit (s, m, h, d, w, y) correctly\nFor example: `/timer 30m remind me of studying`")
     try:
         sleep = int(time_unit_number) * int(input_number)
         if time_unit == "s": time_unit = "seconds"
@@ -582,10 +588,13 @@ async def timer(client: Client, message: types.Message):
         elif time_unit == "w": time_unit = "weeks"
         elif time_unit == "mo": time_unit = "months"
         elif time_unit == "y": time_unit = "years"
-        await message.reply(f"Timer set to {input_number} {time_unit}.")
-    except: return await message.reply("Type time and time unit (s,m,h,d,w,y) correctly.")
+        if input_number == "1": time_unit = time_unit[:-1]
+        try: await message.reply(f"Timer set to **{input_number} {time_unit}**\nReason: **{reason}**")
+        except: await message.reply(f"Timer set to **{input_number} {time_unit}**")
+    except: return await message.reply("Type time and time unit (s, m, h, d, w, y) correctly\nFor example: `/timer 30m remind me of studying`")
     await asyncio.sleep(sleep)
-    await message.reply("Time over")
+    try: await message.reply(f"Your timer that was set to **{input_number} {time_unit}** for **{reason}** has ended")
+    except: await message.reply(f"Your timer that was set to **{input_number} {time_unit}** has ended")
 
 @app.on_message(filters.command("imagine"))
 async def imagine(client: Client, message: types.Message):
