@@ -872,6 +872,7 @@ async def bard(client: Client, message: types.Message):
     await save_usage(chat_object, "bing")
 
     prompt = message.text.replace("/bing", "").replace("@shinobi7kbot", "").strip()
+    if prompt == "": return await message.reply("Please write your question on the same message.")
     if prompt.lower().startswith("creative"):
         convo_style = ConversationStyle.creative
         string_style = " Creative"
