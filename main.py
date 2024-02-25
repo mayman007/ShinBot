@@ -929,9 +929,9 @@ async def bard(client: Client, message: types.Message):
         else: await message.reply(response_text)
         if web_search_results_bool: await message.reply(web_search_results_text)
         # assert response
-    except Exception as error:
-        print(f"response_text {response_text}")
-        raise error
+    except Exception as e:
+        print(f"Bing error: {e}")
+        await message.reply("Sorry, an unexpected error had occured.")
     finally:
         if bot is not None:
             await bot.close()
