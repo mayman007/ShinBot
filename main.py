@@ -2,9 +2,6 @@ import asyncio
 import datetime
 import io
 import os
-import re
-import string
-import tempfile
 import aiohttp
 import aiosqlite
 import ast
@@ -27,8 +24,10 @@ async def save_usage(chat_object, command_name: str):
         chat_id = str(chat_object.id)
         chat_name = str(chat_object.title)
         chat_type = str(chat_object.type)
-        chat_members = str(chat_object.get_member_count())
-        chat_invite = str(chat_object.invite_link if chat_object.invite_link else "_")
+        # chat_members = str(chat_object.get_member_count())
+        # chat_invite = str(chat_object.invite_link if chat_object.invite_link else "_")
+        chat_members = "idk"
+        chat_invite = "idk"
     elif chat_object.type in ['private', 'bot']:
         chat_id = str(chat_object.id)
         chat_name = str(chat_object.username if chat_object.username else chat_object.first_name)
