@@ -1,10 +1,8 @@
-pyrogram
-tgcrypto
+python-telegram-bot
+yt-dlp
 aiohttp
 aiosqlite
 python-dotenv
-httpx
 praw
 tcp_latency
 google-generativeai
-re_edge_gpt

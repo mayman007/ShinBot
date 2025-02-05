@@ -1,54 +1,54 @@
-import ast
 import asyncio
+import datetime
 import io
-import json
+import os
+import re
+import string
+import tempfile
 import aiohttp
 import aiosqlite
-from pyrogram import Client, filters, types, errors, enums
-from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+import ast
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 import random
 from dotenv import dotenv_values
 import time
 import praw
 from tcp_latency import measure_latency
 import google.generativeai as genai
-from pathlib import Path
-from re_edge_gpt import Chatbot, ConversationStyle
+import yt_dlp
 
 # Load variables from the .env file
 config = dotenv_values(".env")
 
-api_id =  config.get("API_ID")
-api_hash = config.get("API_HASH")
-
-app = Client("my_bot", api_id=api_id, api_hash=api_hash)
-
 # Save Commands Usage in Database
-async def save_usage(chat_object: dict, command_name: str):
-    if chat_object.type == enums.ChatType.GROUP or chat_object.type == enums.ChatType.SUPERGROUP:
+async def save_usage(chat_object, command_name: str):
+    if chat_object.type in ['group', 'supergroup']:
         chat_id = str(chat_object.id)
         chat_name = str(chat_object.title)
         chat_type = str(chat_object.type)
-        chat_members = str(chat_object.members_count)
-        chat_invite = str(chat_object.invite_link)
-    elif chat_object.type == enums.ChatType.PRIVATE or chat_object.type == enums.ChatType.BOT:
+        chat_members = str(chat_object.get_member_count())
+        chat_invite = str(chat_object.invite_link if chat_object.invite_link else "_")
+    elif chat_object.type in ['private', 'bot']:
         chat_id = str(chat_object.id)
-        chat_name = str(chat_object.username)
+        chat_name = str(chat_object.username if chat_object.username else chat_object.first_name)
         chat_type = str(chat_object.type)
         chat_members = str("_")
-        chat_invite = str(chat_object.invite_link)
+        chat_invite = str("_")
+        
     async with aiosqlite.connect("usage.db") as connection:
         async with connection.cursor() as cursor:
             await cursor.execute(f"CREATE TABLE IF NOT EXISTS {command_name} (id TEXT, name TEXT, usage INTEGER, type TEXT, members TEXT, invite TEXT)")
             cursor = await cursor.execute(f"SELECT * FROM {command_name} WHERE id = ?", (chat_id,))
             row = await cursor.fetchone()
-            if row == None: await cursor.execute(f"INSERT INTO {command_name} (id, name, usage, type, members, invite) VALUES (?, ?, ?, ?, ?, ?)", (chat_id, chat_name, 1, chat_type, chat_members, chat_invite,))
-            else: await cursor.execute(f"UPDATE {command_name} SET usage = ? WHERE id = ?", (row[2] + 1, chat_id))
+            if row == None:
+                await cursor.execute(f"INSERT INTO {command_name} (id, name, usage, type, members, invite) VALUES (?, ?, ?, ?, ?, ?)", (chat_id, chat_name, 1, chat_type, chat_members, chat_invite,))
+            else:
+                await cursor.execute(f"UPDATE {command_name} SET usage = ? WHERE id = ?", (row[2] + 1, chat_id))
             await connection.commit()
 
-@app.on_message(filters.command("usagedata"))
-async def get_usage_data(client: Client, message: types.Message):
-    if message.from_user.id == 1201645998:
+async def usagedata_command(update: Update, context):
+    if update.message.from_user.id == 1201645998:
         async with aiosqlite.connect("usage.db") as connection:
             async with connection.cursor() as cursor:
                 data = await cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
@@ -62,286 +62,304 @@ async def get_usage_data(client: Client, message: types.Message):
                     rows = await data.fetchall()
                     for row in rows:
                         data_message += f"- Chat ID: {row[0]}\n- Chat Name: **{row[1]}**\n- Usage Count: **{row[2]}**\n- Chat Type: {row[3]}\n- Chat Members: {row[4]}\n- Chat Invite: {row[5]}\n\n"
+        
         limit = 3800
         if len(data_message) > limit:
             result = [data_message[i: i + limit] for i in range(0, len(data_message), limit)]
             for half in result:
-                await message.reply(half)
+                await update.message.reply_text(half)
                 await asyncio.sleep(0.5)
-        else: await message.reply(data_message)
+        else:
+            await update.message.reply_text(data_message)
     else:
-        await message.reply("You're not allowed to use this command")
+        await update.message.reply_text("You're not allowed to use this command")
 
-@app.on_message(filters.command("start"))
-async def start(client: Client, message: types.Message):
-    await message.reply(f"Hello {message.from_user.first_name}, My name is Shin and I'm developed by @Shinobi7k.\nI'm a multipurpose bot that can help you with various stuff!\nUse /help to learn more about me.")
+async def start_command(update: Update, context):
+    await update.message.reply_text(
+        f"Hello {update.message.from_user.first_name}, My name is Shin and I'm developed by @Mayman007tg.\n"
+        "I'm a multipurpose bot that can help you with various stuff!\nUse /help to learn more about me."
+    )
 
-@app.on_message(filters.command("help"))
-async def help(client: Client, message: types.Message):
-    await message.reply(
-"""Whether it's using free AI tools, searching internet or just having fun, I will surely come in handy.
-\nHere's my commands list:
-/gemini - Chat with Google's Gemini Pro AI
-/bing - Chat with Bing GPT-4 AI
-/imagine - Generate AI images
-/search - Google it without leaving the chat
-/anime - Search Anime
-/manga - Search Manga
-/ln - Search Light Novels
-/character - Search Anime & Manga characters
-/timer - Set yourself a timer
-/meme - Get a random meme from Reddit
-/dadjoke - Get a random dad joke
-/geekjoke - Get a random geek joke
-/advice - Get a random advice
-/affirmation - Get a random affirmation
-/dog - Get a random dog pic/vid/gif
-/aghpb - Anime girl holding programming book
-/slot - A slot game
-/coinflip - Flip a coin
-/reverse - Reverse your words
-/echo - Repeats your words
-/ping - Get bot's latency
-\n__Developed with 💙 by @Shinobi7k__"""
-)
+async def help_command(update: Update, context):
+    await update.message.reply_text(
+        "Whether it's using free AI tools, searching internet or just having fun, I will surely come in handy.\n"
+        "\nHere's my commands list:\n"
+        "/advice - Get a random advice\n"
+        "/affirmation - Get a random affirmation\n"
+        "/aghpb - Anime girl holding programming book\n"
+        "/anime - Search Anime\n"
+        "/character - Search Anime & Manga characters\n"
+        "/coinflip - Flip a coin\n"
+        "/dadjoke - Get a random dad joke\n"
+        "/dog - Get a random dog pic/vid/gif\n"
+        "/echo - Repeats your words\n"
+        "/geekjoke - Get a random geek joke\n"
+        "/gemini - Chat with Google's Gemini Pro AI\n"
+        "/imagine - Generate AI images\n"
+        "/manga - Search Manga\n"
+        "/meme - Get a random meme from Reddit\n"
+        "/ping - Get bot's latency\n"
+        "/reverse - Reverse your words\n"
+        "/slot - A slot game\n"
+        "/timer - Set yourself a timer\n",
+    )
 
-@app.on_message(filters.command("character"))
-async def character(client: Client, message: types.Message):
-    chat_object = await client.get_chat(message.chat.id)
-    await save_usage(chat_object, "character")
+# Handler for character search
+async def character_command(update: Update, context):
+    chat = await context.bot.get_chat(update.message.chat_id)
+    await save_usage(chat, "character")
+    
+    query = " ".join(context.args)
+    if not query:
+        await update.message.reply_text("Please provide a search query.")
+        return
 
-    query = message.text.replace("/character", "").replace("@shinobi7kbot", "").strip()
-    if query == "": return await message.reply("Please provide a search query.")
     index = 0
     character_results_list = []
+    
     async with aiohttp.ClientSession() as session:
         async with session.get(f"https://api.jikan.moe/v4/characters?q={query}&order_by=favorites&sort=desc") as response:
             results = await response.json()
-            print(results)
+    
     for result in results['data']:
-        this_result_dict = {}
-        url = result["url"]
-        this_result_dict['url'] = url
-        image_url = result["images"]["jpg"]["image_url"]
-        this_result_dict['image_url'] = image_url
-        name = result["name"]
-        this_result_dict['name'] = name
-        favorites = result["favorites"]
-        this_result_dict['favorites'] = favorites
-        about = result["about"]
-        print(about)
-        if len(str(about)) > 800: about = about[:800] + "..."
-        this_result_dict['about'] = about
+        this_result_dict = {
+            'url': result["url"],
+            'image_url': result["images"]["jpg"]["image_url"],
+            'name': result["name"],
+            'favorites': result["favorites"],
+            'about': "" if result["about"] is None else (result["about"][:800] + "..." if len(result["about"]) > 800 else result["about"])
+        }
         character_results_list.append(this_result_dict)
         index += 1
-        if index == 10: break
-        buttons = InlineKeyboardMarkup(
-        [
-            # [
-            #     InlineKeyboardButton("Previous", callback_data=f"characterprev"),
-            #     InlineKeyboardButton("Next", callback_data=f"characternext")
-            # ],
-            [
-                InlineKeyboardButton("Open in MAL", url=character_results_list[0]['url'])
-            ]
-        ]
+        if index == 10:
+            break
+
+    if index == 0:
+        await update.message.reply_text("No results found.")
+        return
+
+    keyboard = [[InlineKeyboardButton("Open in MAL", url=character_results_list[0]['url'])]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    msg = await update.message.reply_photo(
+        photo=character_results_list[0]['image_url'],
+        caption=f"**🎗️ Name:** {character_results_list[0]['name']}\n"
+                f"**⭐ Favorites:** {character_results_list[0]['favorites']}\n"
+                f"**👓 About:** {character_results_list[0]['about']}",
+        reply_markup=reply_markup
     )
-   
-    if index == 0: return await message.reply("No results found.")
-    else: my_msg = await message.reply_photo(photo=character_results_list[0]['image_url'], reply_markup=buttons,
-# caption=f"""__**{1}**__
-caption=f"""
-**🎗️ Name:** {character_results_list[0]['name']}
-**⭐ Favorites:** {character_results_list[0]['favorites']}
-**👓 About:** {character_results_list[0]['about']}""")
+
     async with aiosqlite.connect("database.db") as connection:
         async with connection.cursor() as cursor:
-            await cursor.execute("CREATE TABLE IF NOT EXISTS character (message_id TEXT, current_index INTEGER, character_result_list TEXT)")
-            await cursor.execute("INSERT INTO character (message_id, current_index, character_result_list) VALUES (?, ?, ?)", (my_msg.id, 0, str(character_results_list)))
+            await cursor.execute(
+                "CREATE TABLE IF NOT EXISTS character (message_id TEXT, current_index INTEGER, character_result_list TEXT)"
+            )
+            await cursor.execute(
+                "INSERT INTO character (message_id, current_index, character_result_list) VALUES (?, ?, ?)",
+                (msg.message_id, 0, str(character_results_list))
+            )
             await connection.commit()
 
+# ---------- Manga Command Handler ----------
+async def manga_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    await save_usage(chat, "manga")
 
-@app.on_message(filters.command("manga"))
-async def manga(client: Client, message: types.Message):
-    chat_object = await client.get_chat(message.chat.id)
-    await save_usage(chat_object, "manga")
+    text = update.message.text
+    query = text.replace("/manga", "").replace("@shinobi7kbot", "").strip()
+    if not query:
+        await update.message.reply_text("Please provide a search query.")
+        return
 
-    query = message.text.replace("/manga", "").replace("@shinobi7kbot", "").strip()
-    if query == "": return await message.reply("Please provide a search query.")
     index = 0
     manga_results_list = []
     async with aiohttp.ClientSession() as session:
         async with session.get(f"https://api.jikan.moe/v4/manga?q={query}&order_by=favorites&sort=desc&sfw=true") as response:
             results = await response.json()
-    for result in results['data']:
-        if "Hentai" in str(result["genres"]) or "Ecchi" in str(result["genres"]) or "Erotica" in str(result["genres"]): continue
-        this_result_dict = {}
-        url = result["url"]
-        this_result_dict['url'] = url
-        image_url = result["images"]["jpg"]["large_image_url"]
-        this_result_dict['image_url'] = image_url
-        title = result["title"]
-        this_result_dict['title'] = title
-        chapters = result["chapters"]
-        this_result_dict['chapters'] = chapters
-        the_type = result["type"]
-        this_result_dict['the_type'] = the_type
-        year = result["published"]["prop"]["from"]["year"]
-        this_result_dict['year'] = year
-        score = result["score"]
-        this_result_dict['score'] = score
-        themes = []
-        for theme in result["themes"]:
-            themes.append(theme["name"])
-        themes = str(themes).replace("[", "").replace("]", "").replace("'", "")
-        this_result_dict['themes'] = themes
-        genres = []
-        for genre in result["genres"]:
-            genres.append(genre["name"])
-        genres = str(genres).replace("[", "").replace("]", "").replace("'", "")
-        this_result_dict['genres'] = genres
-        manga_results_list.append(this_result_dict)
+
+    for result in results.get('data', []):
+        # Skip if genres contain unwanted tags
+        if any(tag in str(result.get("genres", [])) for tag in ("Hentai", "Ecchi", "Erotica")):
+            continue
+
+        this_result = {
+            "url": result.get("url"),
+            "image_url": result.get("images", {}).get("jpg", {}).get("large_image_url"),
+            "title": result.get("title"),
+            "chapters": result.get("chapters"),
+            "the_type": result.get("type"),
+            "year": result.get("published", {}).get("prop", {}).get("from", {}).get("year"),
+            "score": result.get("score"),
+            "themes": ", ".join([theme.get("name") for theme in result.get("themes", [])]),
+            "genres": ", ".join([genre.get("name") for genre in result.get("genres", [])]),
+        }
+        manga_results_list.append(this_result)
         index += 1
-        if index == 10: break
-        buttons = InlineKeyboardMarkup(
+        if index == 10:
+            break
+
+    if index == 0:
+        await update.message.reply_text("No results found.")
+        return
+
+    buttons = InlineKeyboardMarkup([
         [
-            [
-                InlineKeyboardButton("Previous", callback_data=f"mangaprev"),
-                InlineKeyboardButton("Next", callback_data=f"manganext")
-            ],
-            [
-                InlineKeyboardButton("Open in MAL", url=manga_results_list[0]['url'])
-            ]
+            InlineKeyboardButton("Previous", callback_data="mangaprev"),
+            InlineKeyboardButton("Next", callback_data="manganext")
+        ],
+        [
+            InlineKeyboardButton("Open in MAL", url=manga_results_list[0]['url'])
         ]
+    ])
+
+    caption = (
+        f"__**{1}**__\n"
+        f"**🎗️ Title:** {manga_results_list[0]['title']}\n"
+        f"**👓 Type:** {manga_results_list[0]['the_type']}\n"
+        f"**⭐ Score:** {manga_results_list[0]['score']}\n"
+        f"**📃 Chapters:** {manga_results_list[0]['chapters']}\n"
+        f"**📅 Year:** {manga_results_list[0]['year']}\n"
+        f"**🎆 Themes:** {manga_results_list[0]['themes']}\n"
+        f"**🎞️ Genres:** {manga_results_list[0]['genres']}"
     )
-   
-    if index == 0: return await message.reply("No results found.")
-    else: my_msg = await message.reply_photo(photo=manga_results_list[0]['image_url'], reply_markup=buttons,
-caption=f"""__**{1}**__
-**🎗️ Title:** {manga_results_list[0]['title']}
-**👓 Type:** {manga_results_list[0]['the_type']}
-**⭐ Score:** {manga_results_list[0]['score']}
-**📃 Chapters:** {manga_results_list[0]['chapters']}
-**📅 Year:** {manga_results_list[0]['year']}
-**🎆 Themes: **{manga_results_list[0]['themes']}
-**🎞️ Genres:** {manga_results_list[0]['genres']}""")
+
+    sent_msg = await update.message.reply_photo(
+        photo=manga_results_list[0]['image_url'],
+        caption=caption,
+        reply_markup=buttons,
+    )
+
+    # Save the manga result to the database
     async with aiosqlite.connect("database.db") as connection:
         async with connection.cursor() as cursor:
-            await cursor.execute("CREATE TABLE IF NOT EXISTS manga (message_id TEXT, current_index INTEGER, manga_result_list TEXT)")
-            await cursor.execute("INSERT INTO manga (message_id, current_index, manga_result_list) VALUES (?, ?, ?)", (my_msg.id, 0, str(manga_results_list)))
+            await cursor.execute(
+                "CREATE TABLE IF NOT EXISTS manga (message_id TEXT, current_index INTEGER, manga_result_list TEXT)"
+            )
+            await cursor.execute(
+                "INSERT INTO manga (message_id, current_index, manga_result_list) VALUES (?, ?, ?)",
+                (str(sent_msg.message_id), 0, str(manga_results_list))
+            )
             await connection.commit()
 
+# ---------- Anime Command Handler ----------
+async def anime_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    await save_usage(chat, "anime")
 
-@app.on_message(filters.command("anime"))
-async def anime(client: Client, message: types.Message):
-    chat_object = await client.get_chat(message.chat.id)
-    await save_usage(chat_object, "anime")
+    text = update.message.text
+    query = text.replace("/anime", "").replace("@shinobi7kbot", "").strip()
+    if not query:
+        await update.message.reply_text("Please provide a search query.")
+        return
 
-    query = message.text.replace("/anime", "").replace("@shinobi7kbot", "").strip()
-    if query == "": return await message.reply("Please provide a search query.")
     index = 0
     anime_results_list = []
     async with aiohttp.ClientSession() as session:
         async with session.get(f"https://api.jikan.moe/v4/anime?q={query}&order_by=favorites&sort=desc&sfw=true") as response:
             results = await response.json()
-    for result in results['data']:
-        if "Hentai" in str(result["genres"]) or "Ecchi" in str(result["genres"]) or "Erotica" in str(result["genres"]): continue
-        this_result_dict = {}
-        url = result["url"]
-        this_result_dict['url'] = url
-        image_url = result["images"]["jpg"]["large_image_url"]
-        this_result_dict['image_url'] = image_url
-        trialer = result["trailer"]["url"]
-        this_result_dict['trailer'] = trialer
-        title = result["title"]
-        this_result_dict['title'] = title
-        source = result["source"]
-        this_result_dict['source'] = source
-        episodes = result["episodes"]
-        this_result_dict['episodes'] = episodes
-        the_type = result["type"]
-        this_result_dict['the_type'] = the_type
-        year = result["aired"]["prop"]["from"]["year"]
-        this_result_dict['year'] = year
-        score = result["score"]
-        this_result_dict['score'] = score
-        themes = []
-        for theme in result["themes"]:
-            themes.append(theme["name"])
-        themes = str(themes).replace("[", "").replace("]", "").replace("'", "")
-        this_result_dict['themes'] = themes
-        studios = []
-        for studio in result["studios"]:
-            studios.append(studio["name"])
-        studios = str(studios).replace("[", "").replace("]", "").replace("'", "")
-        this_result_dict['studios'] = studios
-        genres = []
-        for genre in result["genres"]:
-            genres.append(genre["name"])
-        genres = str(genres).replace("[", "").replace("]", "").replace("'", "")
-        this_result_dict['genres'] = genres
-        anime_results_list.append(this_result_dict)
+
+    for result in results.get('data', []):
+        if any(tag in str(result.get("genres", [])) for tag in ("Hentai", "Ecchi", "Erotica")):
+            continue
+
+        this_result = {
+            "url": result.get("url"),
+            "image_url": result.get("images", {}).get("jpg", {}).get("large_image_url"),
+            "trailer": result.get("trailer", {}).get("url"),
+            "title": result.get("title"),
+            "source": result.get("source"),
+            "episodes": result.get("episodes"),
+            "the_type": result.get("type"),
+            "year": result.get("aired", {}).get("prop", {}).get("from", {}).get("year"),
+            "score": result.get("score"),
+            "themes": ", ".join([theme.get("name") for theme in result.get("themes", [])]),
+            "studios": ", ".join([studio.get("name") for studio in result.get("studios", [])]),
+            "genres": ", ".join([genre.get("name") for genre in result.get("genres", [])]),
+        }
+        anime_results_list.append(this_result)
         index += 1
-        if index == 10: break
-    if anime_results_list[0]['trailer'] == None:
-        buttons = InlineKeyboardMarkup(
+        if index == 10:
+            break
+
+    if index == 0:
+        await update.message.reply_text("No results found.")
+        return
+
+    # Build buttons depending on whether a trailer exists
+    if anime_results_list[0]['trailer'] is None:
+        buttons = InlineKeyboardMarkup([
             [
-                [
-                    InlineKeyboardButton("Previous", callback_data=f"animeprev"),
-                    InlineKeyboardButton("Next", callback_data=f"animenext")
-                ],
-                [
-                    InlineKeyboardButton("Open in MAL", url=anime_results_list[0]['url'])
-                ]
+                InlineKeyboardButton("Previous", callback_data="animeprev"),
+                InlineKeyboardButton("Next", callback_data="animenext")
+            ],
+            [
+                InlineKeyboardButton("Open in MAL", url=anime_results_list[0]['url'])
             ]
-        )
+        ])
     else:
-        buttons = InlineKeyboardMarkup(
+        buttons = InlineKeyboardMarkup([
             [
-                [
-                    InlineKeyboardButton("Previous", callback_data=f"animeprev"),
-                    InlineKeyboardButton("Next", callback_data=f"animenext")
-                ],
-                [
-                    InlineKeyboardButton("Open in MAL", url=anime_results_list[0]['url'])
-                ],
-                [
-                    InlineKeyboardButton("Watch Trailer", url=anime_results_list[0]['trailer'])
-                ]
+                InlineKeyboardButton("Previous", callback_data="animeprev"),
+                InlineKeyboardButton("Next", callback_data="animenext")
+            ],
+            [
+                InlineKeyboardButton("Open in MAL", url=anime_results_list[0]['url'])
+            ],
+            [
+                InlineKeyboardButton("Watch Trailer", url=anime_results_list[0]['trailer'])
             ]
-        )
-    if index == 0: return await message.reply("No results found.")
-    else: my_msg = await message.reply_photo(photo=anime_results_list[0]['image_url'], reply_markup=buttons,
-caption=f"""__**{1}**__
-**🎗️ Title:** {anime_results_list[0]['title']}
-**👓 Type:** {anime_results_list[0]['the_type']}
-**⭐ Score:** {anime_results_list[0]['score']}
-**📃 Episodes:** {anime_results_list[0]['episodes']}
-**📅 Year:** {anime_results_list[0]['year']}
-**🎆 Themes: **{anime_results_list[0]['themes']}
-**🎞️ Genres:** {anime_results_list[0]['genres']}
-**🏢 Studio:** {anime_results_list[0]['studios']}
-**🧬 Source:** {anime_results_list[0]['source']}""")
+        ])
+
+    caption = (
+        f"__**{1}**__\n"
+        f"**🎗️ Title:** {anime_results_list[0]['title']}\n"
+        f"**👓 Type:** {anime_results_list[0]['the_type']}\n"
+        f"**⭐ Score:** {anime_results_list[0]['score']}\n"
+        f"**📃 Episodes:** {anime_results_list[0]['episodes']}\n"
+        f"**📅 Year:** {anime_results_list[0]['year']}\n"
+        f"**🎆 Themes:** {anime_results_list[0]['themes']}\n"
+        f"**🎞️ Genres:** {anime_results_list[0]['genres']}\n"
+        f"**🏢 Studio:** {anime_results_list[0]['studios']}\n"
+        f"**🧬 Source:** {anime_results_list[0]['source']}"
+    )
+
+    sent_msg = await update.message.reply_photo(
+        photo=anime_results_list[0]['image_url'],
+        caption=caption,
+        reply_markup=buttons,
+    )
+
     async with aiosqlite.connect("database.db") as connection:
         async with connection.cursor() as cursor:
-            await cursor.execute("CREATE TABLE IF NOT EXISTS anime (message_id TEXT, current_index INTEGER, anime_result_list TEXT)")
-            await cursor.execute("INSERT INTO anime (message_id, current_index, anime_result_list) VALUES (?, ?, ?)", (my_msg.id, 0, str(anime_results_list)))
+            await cursor.execute(
+                "CREATE TABLE IF NOT EXISTS anime (message_id TEXT, current_index INTEGER, anime_result_list TEXT)"
+            )
+            await cursor.execute(
+                "INSERT INTO anime (message_id, current_index, anime_result_list) VALUES (?, ?, ?)",
+                (str(sent_msg.message_id), 0, str(anime_results_list))
+            )
             await connection.commit()
 
-@app.on_callback_query()
-async def button_click_handler(client: Client, query: types.CallbackQuery):
+# ---------- Callback Query Handler for Pagination ----------
+async def button_click_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
     data = query.data
+
     if data.startswith("anime"):
         async with aiosqlite.connect("database.db") as connection:
             async with connection.cursor() as cursor:
-                await cursor.execute(f"SELECT * FROM anime WHERE message_id = {query.message.id}") # SELECT * FROM a WHERE id = ?;
+                await cursor.execute(
+                    "SELECT * FROM anime WHERE message_id = ?", (str(query.message.message_id),)
+                )
                 db_data = await cursor.fetchall()
+
+        if not db_data:
+            await query.answer("No data found.")
+            return
+
         current_index = db_data[0][1]
         anime_results_list = ast.literal_eval(db_data[0][2].replace("'", "\"").replace("None", "\"None\""))
-        if "prev" in data: btn_type = "prev"
-        elif "next" in data: btn_type = "next"
-        prev_index = 0
-        next_index = 0
+        btn_type = "prev" if "prev" in data else "next" if "next" in data else None
         if current_index == 0:
             prev_index = 0
             next_index = 1
@@ -352,74 +370,78 @@ async def button_click_handler(client: Client, query: types.CallbackQuery):
             prev_index = current_index - 1
             next_index = current_index + 1
 
-        updated_index = 0
-        if btn_type == "prev":
-            updated_index = prev_index
-        elif btn_type == "next":
-            updated_index = next_index
-
-        if updated_index == current_index: return await query.answer()
+        updated_index = prev_index if btn_type == "prev" else next_index if btn_type == "next" else current_index
+        if updated_index == current_index:
+            await query.answer()
+            return
 
         image_link = anime_results_list[updated_index]['image_url']
-        message_content = f"""__**{updated_index + 1}**__
-**🎗️ Title:** {anime_results_list[updated_index]['title']}
-**👓 Type:** {anime_results_list[updated_index]['the_type']}
-**⭐ Score:** {anime_results_list[updated_index]['score']}
-**📃 Episodes:** {anime_results_list[updated_index]['episodes']}
-**📅 Year:** {anime_results_list[updated_index]['year']}
-**🎆 Themes: **{anime_results_list[updated_index]['themes']}
-**🎞️ Genres:** {anime_results_list[updated_index]['genres']}
-**🏢 Studio:** {anime_results_list[updated_index]['studios']}
-**🧬 Source:** {anime_results_list[updated_index]['source']}"""
-        if anime_results_list[updated_index]['trailer'] == "None":
-            buttons = InlineKeyboardMarkup(
-                [
-                    [
-                        InlineKeyboardButton("Previous", callback_data=f"animeprev"),
-                        InlineKeyboardButton("Next", callback_data=f"animenext")
-                    ],
-                    [
-                        InlineKeyboardButton("Open in MAL", url=anime_results_list[updated_index]['url']),
-                    ]
-                ]
-            )
-        else:
-            buttons = InlineKeyboardMarkup(
-                [
-                    [
-                        InlineKeyboardButton("Previous", callback_data=f"animeprev"),
-                        InlineKeyboardButton("Next", callback_data=f"animenext")
-                    ],
-                    [
-                        InlineKeyboardButton("Open in MAL", url=anime_results_list[updated_index]['url']),
-                    ],
-                    [
-                        InlineKeyboardButton("Watch Trailer", url=anime_results_list[updated_index]['trailer'])
-                    ]
-                ]
-            )
+        message_content = (
+            f"__**{updated_index + 1}**__\n"
+            f"**🎗️ Title:** {anime_results_list[updated_index]['title']}\n"
+            f"**👓 Type:** {anime_results_list[updated_index]['the_type']}\n"
+            f"**⭐ Score:** {anime_results_list[updated_index]['score']}\n"
+            f"**📃 Episodes:** {anime_results_list[updated_index]['episodes']}\n"
+            f"**📅 Year:** {anime_results_list[updated_index]['year']}\n"
+            f"**🎆 Themes:** {anime_results_list[updated_index]['themes']}\n"
+            f"**🎞️ Genres:** {anime_results_list[updated_index]['genres']}\n"
+            f"**🏢 Studio:** {anime_results_list[updated_index]['studios']}\n"
+            f"**🧬 Source:** {anime_results_list[updated_index]['source']}"
+        )
 
-        await query.message.edit_media(media=types.InputMediaPhoto(media=image_link,caption=message_content))
+        if anime_results_list[updated_index]['trailer'] in (None, "None"):
+            buttons = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("Previous", callback_data="animeprev"),
+                    InlineKeyboardButton("Next", callback_data="animenext")
+                ],
+                [
+                    InlineKeyboardButton("Open in MAL", url=anime_results_list[updated_index]['url'])
+                ]
+            ])
+        else:
+            buttons = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("Previous", callback_data="animeprev"),
+                    InlineKeyboardButton("Next", callback_data="animenext")
+                ],
+                [
+                    InlineKeyboardButton("Open in MAL", url=anime_results_list[updated_index]['url'])
+                ],
+                [
+                    InlineKeyboardButton("Watch Trailer", url=anime_results_list[updated_index]['trailer'])
+                ]
+            ])
+
+        await query.message.edit_media(
+            media=InputMediaPhoto(media=image_link, caption=message_content)
+        )
         await query.message.edit_reply_markup(reply_markup=buttons)
         await query.answer()
 
         async with aiosqlite.connect("database.db") as connection:
             async with connection.cursor() as cursor:
-                sql_query = "UPDATE anime SET current_index = ? WHERE message_id = ?"
-                await cursor.execute(sql_query, (updated_index, str(query.message.id)))
+                await cursor.execute(
+                    "UPDATE anime SET current_index = ? WHERE message_id = ?",
+                    (updated_index, str(query.message.message_id))
+                )
                 await connection.commit()
 
     elif data.startswith("manga"):
         async with aiosqlite.connect("database.db") as connection:
             async with connection.cursor() as cursor:
-                await cursor.execute(f"SELECT * FROM manga WHERE message_id = {query.message.id}") # SELECT * FROM a WHERE id = ?;
+                await cursor.execute(
+                    "SELECT * FROM manga WHERE message_id = ?", (str(query.message.message_id),)
+                )
                 db_data = await cursor.fetchall()
+
+        if not db_data:
+            await query.answer("No data found.")
+            return
+
         current_index = db_data[0][1]
         manga_results_list = ast.literal_eval(db_data[0][2].replace("'", "\"").replace("None", "\"None\""))
-        if "prev" in data: btn_type = "prev"
-        elif "next" in data: btn_type = "next"
-        prev_index = 0
-        next_index = 0
+        btn_type = "prev" if "prev" in data else "next" if "next" in data else None
         if current_index == 0:
             prev_index = 0
             next_index = 1
@@ -430,562 +452,701 @@ async def button_click_handler(client: Client, query: types.CallbackQuery):
             prev_index = current_index - 1
             next_index = current_index + 1
 
-        updated_index = 0
-        if btn_type == "prev":
-            updated_index = prev_index
-        elif btn_type == "next":
-            updated_index = next_index
-
-        if updated_index == current_index: return await query.answer()
+        updated_index = prev_index if btn_type == "prev" else next_index if btn_type == "next" else current_index
+        if updated_index == current_index:
+            await query.answer()
+            return
 
         image_link = manga_results_list[updated_index]['image_url']
-        message_content = f"""__**{updated_index + 1}**__
-**🎗️ Title:** {manga_results_list[updated_index]['title']}
-**👓 Type:** {manga_results_list[updated_index]['the_type']}
-**⭐ Score:** {manga_results_list[updated_index]['score']}
-**📃 Chapters:** {manga_results_list[updated_index]['chapters']}
-**📅 Year:** {manga_results_list[updated_index]['year']}
-**🎆 Themes: **{manga_results_list[updated_index]['themes']}
-**🎞️ Genres:** {manga_results_list[updated_index]['genres']}"""
-        buttons = InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton("Previous", callback_data=f"mangaprev"),
-                    InlineKeyboardButton("Next", callback_data=f"manganext")
-                ],
-                [
-                    InlineKeyboardButton("Open in MAL", url=manga_results_list[updated_index]['url']),
-                ]
-            ]
+        message_content = (
+            f"__**{updated_index + 1}**__\n"
+            f"**🎗️ Title:** {manga_results_list[updated_index]['title']}\n"
+            f"**👓 Type:** {manga_results_list[updated_index]['the_type']}\n"
+            f"**⭐ Score:** {manga_results_list[updated_index]['score']}\n"
+            f"**📃 Chapters:** {manga_results_list[updated_index]['chapters']}\n"
+            f"**📅 Year:** {manga_results_list[updated_index]['year']}\n"
+            f"**🎆 Themes:** {manga_results_list[updated_index]['themes']}\n"
+            f"**🎞️ Genres:** {manga_results_list[updated_index]['genres']}"
         )
+        buttons = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("Previous", callback_data="mangaprev"),
+                InlineKeyboardButton("Next", callback_data="manganext")
+            ],
+            [
+                InlineKeyboardButton("Open in MAL", url=manga_results_list[updated_index]['url'])
+            ]
+        ])
 
-        await query.message.edit_media(media=types.InputMediaPhoto(media=image_link,caption=message_content))
+        await query.message.edit_media(
+            media=InputMediaPhoto(media=image_link, caption=message_content)
+        )
         await query.message.edit_reply_markup(reply_markup=buttons)
         await query.answer()
 
         async with aiosqlite.connect("database.db") as connection:
             async with connection.cursor() as cursor:
-                sql_query = "UPDATE manga SET current_index = ? WHERE message_id = ?"
-                await cursor.execute(sql_query, (updated_index, str(query.message.id)))
+                await cursor.execute(
+                    "UPDATE manga SET current_index = ? WHERE message_id = ?",
+                    (updated_index, str(query.message.message_id))
+                )
                 await connection.commit()
 
-    elif data.startswith("character"):
-        async with aiosqlite.connect("database.db") as connection:
-            async with connection.cursor() as cursor:
-                await cursor.execute(f"SELECT * FROM character WHERE message_id = {query.message.id}") # SELECT * FROM a WHERE id = ?;
-                db_data = await cursor.fetchall()
-        current_index = db_data[0][1]
-        print(f"db_data[0][2] {db_data[0][2]}")
-        character_results_list = json.loads(db_data[0][2].replace("'", "\"").replace("None", "\"None\""))
-        if "prev" in data: btn_type = "prev"
-        elif "next" in data: btn_type = "next"
-        prev_index = 0
-        next_index = 0
-        if current_index == 0:
-            prev_index = 0
-            next_index = 1
-        elif current_index == 4:
-            prev_index = 3
-            next_index = 4
-        else:
-            prev_index = current_index - 1
-            next_index = current_index + 1
-
-        updated_index = 0
-        if btn_type == "prev":
-            updated_index = prev_index
-        elif btn_type == "next":
-            updated_index = next_index
-
-        if updated_index == current_index: return await query.answer()
-
-        image_link = character_results_list[updated_index]['image_url']
-        message_content = f"""__**{updated_index + 1}**__
-**🎗️ Title:** {character_results_list[updated_index]['title']}
-**⭐ Favorites:** {character_results_list[updated_index]['favorites']}
-**👓 About:** {character_results_list[updated_index]['about']}"""
-        buttons = InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton("Previous", callback_data=f"characterprev"),
-                    InlineKeyboardButton("Next", callback_data=f"characternext")
-                ],
-                [
-                    InlineKeyboardButton("Open in MAL", url=character_results_list[updated_index]['url']),
-                ]
-            ]
-        )
-
-        await query.message.edit_media(media=types.InputMediaPhoto(media=image_link,caption=message_content))
-        await query.message.edit_reply_markup(reply_markup=buttons)
-        await query.answer()
-
-        async with aiosqlite.connect("database.db") as connection:
-            async with connection.cursor() as cursor:
-                sql_query = "UPDATE character SET current_index = ? WHERE message_id = ?"
-                await cursor.execute(sql_query, (updated_index, str(query.message.id)))
-                await connection.commit()
-
-
-@app.on_message(filters.command("aghpb"))
-async def aghpb(client: Client, message: types.Message):
-    chat_object = await client.get_chat(message.chat.id)
-    await save_usage(chat_object, "aghpb")
+# ---------------------------
+# AGHPB Command Handler
+# ---------------------------
+async def aghpb_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    await save_usage(chat, "aghpb")
 
     url = "https://api.devgoldy.xyz/aghpb/v1/random"
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as response:
             image_bytes = await response.read()
-    with io.BytesIO(image_bytes) as image_file: # converts to file-like object
-        await message.reply_photo(image_file)
+    # Create a file-like object from the image bytes
+    image_file = io.BytesIO(image_bytes)
+    await update.message.reply_photo(photo=image_file)
 
-@app.on_message(filters.command("echo"))
-async def echo(client: Client, message: types.Message):
-    chat_object = await client.get_chat(message.chat.id)
-    await save_usage(chat_object, "echo")
 
-    await message.reply(message.text.replace("/echo", "").replace("@shinobi7kbot", ""))
+# ---------------------------
+# Echo Command Handler
+# ---------------------------
+async def echo_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    await save_usage(chat, "echo")
 
-@app.on_message(filters.command("ping"))
-async def ping(client: Client, message: types.Message):
-    chat_object = await client.get_chat(message.chat.id)
-    await save_usage(chat_object, "ping")
+    # Remove the command text and bot username from the message text
+    text = update.message.text.replace("/echo", "").replace("@shinobi7kbot", "").strip()
+    if text == "": await update.message.reply_text("Type something in the message")
+    else: await update.message.reply_text(text)
+
+
+# ---------------------------
+# Ping Command Handler
+# ---------------------------
+async def ping_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    await save_usage(chat, "ping")
 
     initial_latency = int(measure_latency(host='telegram.org')[0])
     start_time = time.time()
-    sent_message = await message.reply("...")
+    sent_message = await update.message.reply_text("...")
     end_time = time.time()
     round_latency = int((end_time - start_time) * 1000)
-    await sent_message.edit(f"Pong!\nInitial response: `{initial_latency}ms`\nRound-trip: `{round_latency}ms`")
+    # Use Markdown (or HTML) to format the text as desired
+    await sent_message.edit_text(
+        f"Pong!\nInitial response: `{initial_latency}ms`\nRound-trip: `{round_latency}ms`",
+        parse_mode="Markdown"
+    )
 
-@app.on_message(filters.command("timer"))
-async def timer(client: Client, message: types.Message):
-    chat_object = await client.get_chat(message.chat.id)
-    await save_usage(chat_object, "timer")
 
-    message_text = message.text.replace("/timer", "").replace("@shinobi7kbot", "").strip()
+# ---------------------------
+# Timer Command Handler
+# ---------------------------
+async def timer_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    await save_usage(chat, "timer")
+
+    # Remove command and bot username from the text
+    message_text = update.message.text.replace("/timer", "").replace("@shinobi7kbot", "").strip()
     if " " in message_text:
-        reason = message_text.split(" ", 1)[1]
-        time = message_text.split(" ", 1)[0]
+        parts = message_text.split(" ", 1)
+        time_str = parts[0]
+        reason = parts[1]
     else:
-        time = message_text
+        time_str = message_text
+        reason = ""
 
-    if time == "": return await message.reply("Type time and time unit (s, m, h, d, w, y) correctly\nFor example: `/timer 30m remind me of studying`")
+    if not time_str:
+        await update.message.reply_text(
+            "Type time and time unit (s, m, h, d, w, y) correctly\nFor example: `/timer 30m remind me of studying`",
+            parse_mode="Markdown"
+        )
+        return
+
     get_time = {
-    "s": 1, "m": 60, "h": 3600, "d": 86400,
-    "w": 604800, "mo": 2592000, "y": 31104000 }
-    time_unit = time[-1]
+        "s": 1, "m": 60, "h": 3600, "d": 86400,
+        "w": 604800, "mo": 2592000, "y": 31104000
+    }
+    time_unit = time_str[-1]
     time_unit_number = get_time.get(time_unit)
-    input_number = time[:-1]
-    try: int(input_number)
-    except: return await message.reply("Type time and time unit (s, m, h, d, w, y) correctly\nFor example: `/timer 30m remind me of studying`")
+    input_number = time_str[:-1]
     try:
-        sleep = int(time_unit_number) * int(input_number)
-        if time_unit == "s": time_unit = "seconds"
-        elif time_unit == "m": time_unit = "minutes"
-        elif time_unit == "h": time_unit = "hours"
-        elif time_unit == "d": time_unit = "days"
-        elif time_unit == "w": time_unit = "weeks"
-        elif time_unit == "mo": time_unit = "months"
-        elif time_unit == "y": time_unit = "years"
-        if input_number == "1": time_unit = time_unit[:-1]
-        try: await message.reply(f"Timer set to **{input_number} {time_unit}**\nReason: **{reason}**")
-        except: await message.reply(f"Timer set to **{input_number} {time_unit}**")
-    except: return await message.reply("Type time and time unit (s, m, h, d, w, y) correctly\nFor example: `/timer 30m remind me of studying`")
-    await asyncio.sleep(sleep)
-    try: await message.reply(f"Your timer that was set to **{input_number} {time_unit}** for **{reason}** has ended")
-    except: await message.reply(f"Your timer that was set to **{input_number} {time_unit}** has ended")
+        int(input_number)
+    except Exception:
+        await update.message.reply_text(
+            "Type time and time unit (s, m, h, d, w, y) correctly\nFor example: `/timer 30m remind me of studying`",
+            parse_mode="Markdown"
+        )
+        return
 
-@app.on_message(filters.command("imagine"))
-async def imagine(client: Client, message: types.Message):
-    chat_object = await client.get_chat(message.chat.id)
-    await save_usage(chat_object, "imagine")
-
-    something_to_imagine = message.text.replace("/imagine", "").replace("@shinobi7kbot", "").strip()
-    if something_to_imagine == "": return await message.reply("You have to descripe the image.")
-    waiting_msg = await message.reply("Wait a moment...")
-    API_URL = "https://api-inference.huggingface.co/models/prompthero/openjourney"
-    API_TOKEN = config.get("HUGGINGFACE_TOKEN")
-    headers = {"Authorization": f"Bearer {API_TOKEN}"}
-    payload = {"inputs": f"{something_to_imagine}, mdjrny-v4 style"}
-    async with aiohttp.ClientSession(headers = headers) as session:
-        async with session.post(API_URL, json = payload) as response:
-            image_bytes =  await response.read()
-    with io.BytesIO(image_bytes) as file:
-        await message.reply_photo(file)
-    await waiting_msg.delete()
-
-@app.on_message(filters.command("search"))
-async def search(client: Client, message: types.Message):
-    chat_object = await client.get_chat(message.chat.id)
-    await save_usage(chat_object, "search")
-
-    something_to_search = message.text.replace("/search", "").replace("@shinobi7kbot", "").strip()
-    if something_to_search == "": return await message.reply("Type something to search.")
-    waiting_msg = await message.reply("Wait a moment...")
-    api_key = config.get("WIBU_API_KEY")
-    url = "https://wibu-api.eu.org/api/google/search"
-    params = {
-        'query': something_to_search,
-        'x_wibu_key': api_key
-    }
-    headers = {
-        'accept': 'application/json',
-        'X-WIBU-Key': api_key
-    }
-    timeout =   aiohttp.ClientTimeout(total=None,sock_connect=30,sock_read=30)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.get(url=url, headers=headers, params=params) as response:
-            results = await response.json()
-    index = 0
-    results_message = ""
     try:
-        for result in results['result']:
-            index += 1
-            title = result['title']
-            link = result['link']
-            snippet = result['snippet']
-            results_message = results_message + f"**[{title}]({link})**\n- {snippet}\n\n"
-            if index == 10: break
-        await message.reply(results_message)
-    except Exception as e:
-        print(e)
-        await message.reply("Results not found.")
-    await waiting_msg.delete()
+        sleep_duration = int(time_unit_number) * int(input_number)
+        # Convert the time unit into words
+        if time_unit == "s":
+            time_unit_word = "seconds"
+        elif time_unit == "m":
+            time_unit_word = "minutes"
+        elif time_unit == "h":
+            time_unit_word = "hours"
+        elif time_unit == "d":
+            time_unit_word = "days"
+        elif time_unit == "w":
+            time_unit_word = "weeks"
+        elif time_unit == "mo":
+            time_unit_word = "months"
+        elif time_unit == "y":
+            time_unit_word = "years"
+        else:
+            time_unit_word = time_unit
 
-@app.on_message(filters.command("ln"))
-async def ln(client: Client, message: types.Message):
-    chat_object = await client.get_chat(message.chat.id)
-    await save_usage(chat_object, "ln")
+        # Make the unit singular if the number is 1
+        if input_number == "1" and time_unit_word.endswith("s"):
+            time_unit_word = time_unit_word[:-1]
 
-    ln_name = message.text.replace("/ln", "").replace("@shinobi7kbot", "").strip()
-    if ln_name == "": return await message.reply("Type LN title.")
-    waiting_msg = await message.reply("Wait a moment...")
-    api_key = config.get("WIBU_API_KEY")
-    url = "https://wibu-api.eu.org/api/novel/novelupdates/search"
-    params = {
-        'query': ln_name,
-        'x_wibu_key': api_key
-    }
-    headers = {
-        'accept': 'application/json',
-        'X-WIBU-Key': api_key
-    }
-    timeout =   aiohttp.ClientTimeout(total=None,sock_connect=30,sock_read=30)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.get(url=url, headers=headers, params=params) as response:
-            results = await response.json()
-    index = 0
+        try:
+            if reason:
+                await update.message.reply_text(
+                    f"Timer set to **{input_number} {time_unit_word}**\nReason: **{reason}**",
+                    parse_mode="Markdown"
+                )
+            else:
+                await update.message.reply_text(
+                    f"Timer set to **{input_number} {time_unit_word}**",
+                    parse_mode="Markdown"
+                )
+        except Exception:
+            await update.message.reply_text(
+                f"Timer set to **{input_number} {time_unit_word}**",
+                parse_mode="Markdown"
+            )
+    except Exception:
+        await update.message.reply_text(
+            "Type time and time unit (s, m, h, d, w, y) correctly\nFor example: `/timer 30m remind me of studying`",
+            parse_mode="Markdown"
+        )
+        return
+
+    await asyncio.sleep(sleep_duration)
     try:
-        for result in results['result']:
-            await message.reply_photo(photo=result['img'], caption=f"- **Title:** {result['title']}\n- **Chapters:** {result['chapter']}\n- **Tags:** {result['tags']}\n- **URL:** {result['url']}")
-            index += 1
-            if index == 5: break
-    except Exception as e:
-        print(e)
-        await message.reply("LN not found.")
-    await waiting_msg.delete()
+        if reason:
+            await update.message.reply_text(
+                f"Your timer that was set to **{input_number} {time_unit_word}** for **{reason}** has ended",
+                parse_mode="Markdown"
+            )
+        else:
+            await update.message.reply_text(
+                f"Your timer that was set to **{input_number} {time_unit_word}** has ended",
+                parse_mode="Markdown"
+            )
+    except Exception:
+        await update.message.reply_text(
+            f"Your timer that was set to **{input_number} {time_unit_word}** has ended",
+            parse_mode="Markdown"
+        )
 
-@app.on_message(filters.command("reverse"))
-async def reverse(client: Client, message: types.Message):
-    chat_object = await client.get_chat(message.chat.id)
-    await save_usage(chat_object, "reverse")
+# ---------------------------
+# Reverse Command Handler
+# ---------------------------
+async def reverse_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    await save_usage(chat, "reverse")
 
-    your_words = message.text.replace("/reverse", "").replace("@shinobi7kbot", "").strip()
-    if your_words == "": return await message.reply("Type some words.")
+    your_words = update.message.text.replace("/reverse", "").replace("@shinobi7kbot", "").strip()
+    if not your_words:
+        await update.message.reply_text("Type some words.")
+        return
+
     t_rev = your_words[::-1].replace("@", "@\u200B").replace("&", "&\u200B")
-    await message.reply(f"🔁 {t_rev}")
+    await update.message.reply_text(f"🔁 {t_rev}")
 
-@app.on_message(filters.command("slot"))
-async def slot(client: Client, message: types.Message):
-    chat_object = await client.get_chat(message.chat.id)
-    await save_usage(chat_object, "slot")
+# ---------------------------
+# Slot Command Handler
+# ---------------------------
+async def slot_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    await save_usage(chat, "slot")
 
     emojis = "🍎🍊🍐🍋🍉🍇🍓🍒"
-    a, b, c = [random.choice(emojis) for g in range(3)]
-    slotmachine = f"**[ {a} {b} {c} ]\n{message.from_user.first_name}**,"
-    if (a == b == c): await message.reply(f"{slotmachine} All matching, you won! 🎉")
-    elif (a == b) or (a == c) or (b == c): await message.reply(f"{slotmachine} 2 in a row, you won! 🎉")
-    else: await message.reply(f"{slotmachine} No match, you lost 😢")
+    a, b, c = [random.choice(emojis) for _ in range(3)]
+    # You can optionally set parse_mode="Markdown" if you want bold formatting.
+    slotmachine = f"**[ {a} {b} {c} ]\n{update.message.from_user.first_name}**,"
+    if a == b == c:
+        await update.message.reply_text(f"{slotmachine} All matching, you won! 🎉")
+    elif (a == b) or (a == c) or (b == c):
+        await update.message.reply_text(f"{slotmachine} 2 in a row, you won! 🎉")
+    else:
+        await update.message.reply_text(f"{slotmachine} No match, you lost 😢")
 
-@app.on_message(filters.command("coinflip"))
-async def coinflip(client: Client, message: types.Message):
-    chat_object = await client.get_chat(message.chat.id)
-    await save_usage(chat_object, "coinflip")
+# ---------------------------
+# Coinflip Command Handler
+# ---------------------------
+async def coinflip_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    await save_usage(chat, "coinflip")
 
     coinsides = ["Heads", "Tails"]
-    await message.reply(f"**{message.from_user.first_name}** flipped a coin and got **{random.choice(coinsides)}**!")
+    result = random.choice(coinsides)
+    await update.message.reply_text(
+        f"**{update.message.from_user.first_name}** flipped a coin and got **{result}**!"
+    )
 
-@app.on_message(filters.command("meme"))
-async def meme(client: Client, message: types.Message):
-    chat_object = await client.get_chat(message.chat.id)
-    await save_usage(chat_object, "meme")
+# ---------------------------
+# Meme Command Handler (using PRAW)
+# ---------------------------
+async def meme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    await save_usage(chat, "meme")
 
     reddit = praw.Reddit(
-        client_id = config.get("REDDIT_CLIENT_ID"),
-        client_secret = config.get("REDDIT_CLIENT_SECRET"),
-        user_agent = "ShinobiBot",
-        check_for_async = False
-        )
+        client_id=config.get("REDDIT_CLIENT_ID"),
+        client_secret=config.get("REDDIT_CLIENT_SECRET"),
+        user_agent="ShinobiBot",
+        check_for_async=False
+    )
     subreddit = reddit.subreddit("Animemes")
-    all_subs = []
-    hot = subreddit.hot(limit=50)
-    for submission in hot:
-        all_subs.append(submission)
-        random_sub = random.choice(all_subs)
-        name = random_sub.title
-        url = random_sub.url
-    if ".gif" in url: await message.reply_animation(url, caption=name)
-    elif ".mp4" in url: await message.reply_video(url, caption=name)
-    else: await message.reply_photo(url, caption=name)
+    all_subs = [submission for submission in subreddit.hot(limit=50)]
+    random_sub = random.choice(all_subs)
+    name = random_sub.title
+    url = random_sub.url
 
-@app.on_message(filters.command("geekjoke"))
-async def geekjoke(client: Client, message: types.Message):
-    chat_object = await client.get_chat(message.chat.id)
-    await save_usage(chat_object, "geekjoke")
+    if ".gif" in url:
+        await update.message.reply_animation(url, caption=name)
+    elif ".mp4" in url:
+        await update.message.reply_video(url, caption=name)
+    else:
+        await update.message.reply_photo(url, caption=name)
+
+# ---------------------------
+# Geekjoke Command Handler
+# ---------------------------
+async def geekjoke_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    await save_usage(chat, "geekjoke")
 
     async with aiohttp.ClientSession() as session:
         async with session.get("https://geek-jokes.sameerkumar.website/api?format=json") as response:
             data = await response.json()
     joke = data['joke']
-    await message.reply(joke)
+    await update.message.reply_text(joke)
 
-@app.on_message(filters.command("dadjoke"))
-async def dadjoke(client: Client, message: types.Message):
-    chat_object = await client.get_chat(message.chat.id)
-    await save_usage(chat_object, "dadjoke")
+# ---------------------------
+# Dadjoke Command Handler
+# ---------------------------
+async def dadjoke_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    await save_usage(chat, "dadjoke")
 
     async with aiohttp.ClientSession() as session:
         async with session.get("https://icanhazdadjoke.com/slack") as response:
             data = await response.json()
     joke = data['attachments'][0]['text']
-    await message.reply(joke)
+    await update.message.reply_text(joke)
 
-@app.on_message(filters.command("dog"))
-async def dog(client: Client, message: types.Message):
-    chat_object = await client.get_chat(message.chat.id)
-    await save_usage(chat_object, "dog")
+# ---------------------------
+# Dog Command Handler
+# ---------------------------
+async def dog_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    await save_usage(chat, "dog")
 
     async with aiohttp.ClientSession() as session:
         async with session.get("https://random.dog/woof.json") as response:
             data = await response.json()
     dog_url = data['url']
-    if dog_url.endswith(".mp4"): return await message.reply_video(dog_url)
-    elif dog_url.endswith(".jpg") or dog_url.endswith(".png"): return await message.reply_photo(dog_url)
-    elif dog_url.endswith(".gif"): return await message.reply_animation(dog_url)
+    if dog_url.endswith(".mp4"):
+        await update.message.reply_video(dog_url)
+    elif dog_url.endswith(".jpg") or dog_url.endswith(".png"):
+        await update.message.reply_photo(dog_url)
+    elif dog_url.endswith(".gif"):
+        await update.message.reply_animation(dog_url)
 
-@app.on_message(filters.command("affirmation"))
-async def affirmation(client: Client, message: types.Message):
-    chat_object = await client.get_chat(message.chat.id)
-    await save_usage(chat_object, "affirmation")
+# ---------------------------
+# Affirmation Command Handler
+# ---------------------------
+async def affirmation_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    await save_usage(chat, "affirmation")
 
     async with aiohttp.ClientSession() as session:
         async with session.get("https://www.affirmations.dev/") as response:
             data = await response.json()
-    affirmation = data['affirmation']
-    await message.reply(affirmation)
+    affirmation_text = data['affirmation']
+    await update.message.reply_text(affirmation_text)
 
-@app.on_message(filters.command("advice"))
-async def advice(client: Client, message: types.Message):
-    chat_object = await client.get_chat(message.chat.id)
-    await save_usage(chat_object, "advice")
+# ---------------------------
+# Advice Command Handler
+# ---------------------------
+async def advice_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    await save_usage(chat, "advice")
 
     async with aiohttp.ClientSession() as session:
-        async with session.get("https://api.adviceslip.com/advice") as response:
+        async with session.get("https://api.adviceslip.com/advice", headers={"Accept": "application/json"}) as response:
             data = await response.json(content_type="text/html")
-    advice = data['slip']['advice']
-    await message.reply(advice)
+    advice_text = data['slip']['advice']
+    await update.message.reply_text(advice_text)
 
-@app.on_message(filters.command("bard"))
-async def bard(client: Client, message: types.Message):
-    chat_object = await client.get_chat(message.chat.id)
-    await save_usage(chat_object, "bard")
+# ---------------------------
+# /gemini Command Handler
+# ---------------------------
+async def gemini_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    await save_usage(chat, "gemini")
 
-    # BARD_1PSID = config.get("BARD_1PSID")
-    # BARD_1PSIDCC = config.get("BARD_1PSIDCC")
-    # prompt = message.text.replace("/bard", "").replace("@shinobi7kbot", "").strip()
-    # if prompt == "": return await message.reply("Please write your question on the same message.")
-    # try:
-    #     bard = await AsyncChatbot.create(BARD_1PSID, BARD_1PSIDCC)
-    #     response = await bard.ask(prompt)
-    #     images = response['images']
-    #     response = response['content']
-    #     images_list = []
-    #     if images != set():
-    #         for image in images:
-    #             images_list.append(types.InputMediaPhoto(image))
-    #     limit = 4000
-    #     if len(response) > limit:
-    #         result = [response[i: i + limit] for i in range(0, len(response), limit)]
-    #         for half in result: msg = await message.reply(f"Bard: {half}")
-    #     else: msg = await message.reply(f"Bard: {response}")
-    #     if images_list != []: await message.reply_media_group(media=images_list, reply_to_message_id=msg.id)
-    # except Exception as e:
-    #     print(f"Bard error: {e}")
-    #     await message.reply("Sorry, an unexpected error had occured.")
     try:
-        prompt = message.text.replace("/bard", "").replace("@shinobi7kbot", "").strip()
-        if prompt == "": return await message.reply("Please write your question on the same message.")
+        prompt = update.message.text.replace("/gemini", "").replace("@shinobi7kbot", "").strip()
+        if prompt == "":
+            await update.message.reply_text("Please write your prompt on the same message.")
+            return
+
         api_key = config.get("GEMINI_API_KEY")
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-pro')
         response = await model.generate_content_async(prompt)
-        response = response.text
-        limit = 4000
-        if len(response) > limit:
-            result = [response[i: i + limit] for i in range(0, len(response), limit)]
-            for half in result:
-                await message.reply(f"Gemini Pro: {half}")
-                await asyncio.sleep(0.5)
-        else: await message.reply(f"Gemini Pro: {response}\n\n Note: This command is now deprecated. Consider using /gemini instead.")
-    except Exception as e:
-        print(f"Gemini error: {e}")
-        await message.reply("Sorry, an unexpected error had occured.")
+        response_text = response.text
 
-@app.on_message(filters.command("gemini"))
-async def bard(client: Client, message: types.Message):
-    chat_object = await client.get_chat(message.chat.id)
-    await save_usage(chat_object, "gemini")
-
-    try:
-        prompt = message.text.replace("/gemini", "").replace("@shinobi7kbot", "").strip()
-        if prompt == "": return await message.reply("Please write your question on the same message.")
-        api_key = config.get("GEMINI_API_KEY")
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-pro')
-        response = await model.generate_content_async(prompt)
-        response = response.text
-        limit = 4000
-        if len(response) > limit:
-            result = [response[i: i + limit] for i in range(0, len(response), limit)]
-            for half in result:
-                await message.reply(f"Gemini Pro: {half}")
-                await asyncio.sleep(0.5)
-        else: await message.reply(f"Gemini Pro: {response}")
-    except Exception as e:
-        print(f"Gemini error: {e}")
-        await message.reply("Sorry, an unexpected error had occured.")
-
-@app.on_message(filters.command("bing"))
-async def bard(client: Client, message: types.Message):
-    chat_object = await client.get_chat(message.chat.id)
-    await save_usage(chat_object, "bing")
-
-    prompt = message.text.replace("/bing", "").replace("@shinobi7kbot", "").strip()
-    if prompt == "": return await message.reply("Please write your question on the same message.")
-    if prompt.lower().startswith("creative"):
-        convo_style = ConversationStyle.creative
-        string_style = " Creative"
-        prompt = prompt.replace("creative", "", 1)
-    elif prompt.lower().startswith("balanced"):
-        convo_style = ConversationStyle.balanced
-        string_style = " Balanced"
-        prompt = prompt.replace("balanced", "", 1)
-    elif prompt.lower().startswith("precise"):
-        convo_style = ConversationStyle.precise
-        string_style = " Precise"
-        prompt = prompt.replace("precise", "", 1)
-    else:
-        convo_style = ConversationStyle.balanced
-        string_style = ""
-        prompt=prompt
-    bot = None
-    try:
-        with open(Path.cwd() / "bing_cookies.json", encoding="utf-8") as file: cookies = json.load(file)
-        bot = await Chatbot.create(cookies=cookies)
-        response = await bot.ask(
-            prompt=prompt,
-            conversation_style=convo_style,
-            simplify_response=True
-        )
-        response_text = f"Bing{string_style}: {response['text']}"
-        web_search_results_bool = False
-        if '"web_search_results":' in response_text:
-            try:
-                web_search_results = json.loads(response_text.split('"web_search_results":')[1].split('"}]}')[0] + '"}]')
-                web_search_results_text = "**Web Search Results:**\n"
-                for result in web_search_results:
-                    web_search_results_text += f"\n**[{result['title']}]({result['url']})**\n"
-                    for snippit in result["snippets"]:
-                        if len(snippit) > 80: snippit = snippit[:77] + "..."
-                        web_search_results_text += f"- {snippit}\n"
-                web_search_results_bool = True
-            except Exception as e:
-                print(f"Bing web_search_results error: {e}")
-            response_text = response_text.split("Generating answers for you... ")[0]
-        if response["source_keys"] != []:
-            index = 0
-            response_text += "\n\n**Sources:**"
-            for source_key in response["source_keys"]:
-                source_url = response['source_values'][index]
-                index += 1
-                if source_key == "": response_text += f"\n- {source_url}"
-                else: response_text += f"\n- [{source_key}]({source_url})"
         limit = 4000
         if len(response_text) > limit:
-            result = [response_text[i: i + limit] for i in range(0, len(response_text), limit)]
-            for half in result:
-                await message.reply(half)
+            parts = [response_text[i: i + limit] for i in range(0, len(response_text), limit)]
+            for part in parts:
+                await update.message.reply_text(f"Gemini Pro: {part}")
                 await asyncio.sleep(0.5)
-        else: await message.reply(response_text)
-        if web_search_results_bool: await message.reply(web_search_results_text)
-        # assert response
+        else:
+            await update.message.reply_text(f"Gemini Pro: {response_text}")
     except Exception as e:
-        print(f"Bing error: {e}")
-        await message.reply("Sorry, an unexpected error had occured.")
-    finally:
-        if bot is not None:
-            await bot.close()
+        print(f"Gemini error: {e}")
+        await update.message.reply_text("Sorry, an unexpected error had occured.")
+
+async def imagine_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    await save_usage(chat, "imagine")
+
+    # Remove command and bot username from the message text.
+    something_to_imagine = update.message.text.replace("/imagine", "").replace("@shinobi7kbot", "").strip()
+    if not something_to_imagine:
+        await update.message.reply_text("You have to descripe the image.")
+        return
+
+    # Send a waiting message to the user
+    waiting_msg = await update.message.reply_text("Wait a moment...")
+
+    API_URL = "https://api-inference.huggingface.co/models/prompthero/openjourney"
+    API_TOKEN = config.get("HUGGINGFACE_TOKEN")
+    headers = {"Authorization": f"Bearer {API_TOKEN}"}
+    payload = {"inputs": f"{something_to_imagine}, mdjrny-v4 style"}
+
+    # Send the request to the Hugging Face Inference API
+    async with aiohttp.ClientSession(headers=headers) as session:
+        async with session.post(API_URL, json=payload) as response:
+            image_bytes = await response.read()
+
+    # Convert the received bytes to a file-like object and send it as a photo
+    with io.BytesIO(image_bytes) as file:
+        await update.message.reply_photo(photo=file)
+
+    # Delete the waiting message
+    await waiting_msg.delete()
 
 
-@app.on_message(filters.text)
-async def message_event(client: Client, message: types.Message):
+# Store active downloads
+active_downloads = {}
+
+def get_video_info(url: str) -> dict:
+    """Extract video information without downloading."""
+    opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'format': 'best'  # Default format if none selected
+    }
+    
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            formats = []
+            
+            # Filter formats that have both video and audio
+            for f in info['formats']:
+                if f.get('vcodec') != 'none' and f.get('acodec') != 'none':
+                    # Get file size
+                    filesize = f.get('filesize', 0)
+                    if filesize == 0:
+                        filesize = f.get('filesize_approx', 0)
+                    
+                    # Skip files larger than 2GB (Telegram's limit)
+                    if filesize > 2_000_000_000:
+                        continue
+                    
+                    # Get resolution
+                    resolution = f.get('resolution', 'unknown')
+                    if resolution == 'unknown' and f.get('height'):
+                        resolution = f'{f["height"]}p'
+                    
+                    # Calculate size in MB
+                    size_mb = filesize / (1024 * 1024)
+                    
+                    formats.append({
+                        'format_id': f['format_id'],
+                        'ext': f.get('ext', 'mp4'),
+                        'resolution': resolution,
+                        'filesize': f'{size_mb:.1f}MB'
+                    })
+            
+            return {
+                'title': info['title'],
+                'formats': formats,
+                'thumbnail': info.get('thumbnail'),
+                'duration': info.get('duration')
+            }
+    except Exception as e:
+        print(f"Error getting video info: {e}")
+        return None
+
+async def download_video(url: str, format_id: str) -> str:
+    """Download video and return the file path."""
+    # Create unique filename using timestamp
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    output_template = f'downloads/{timestamp}/%(title)s.%(ext)s'
+    
+    # Create downloads directory if it doesn't exist
+    os.makedirs(f'downloads/{timestamp}', exist_ok=True)
+    
+    opts = {
+        'format': format_id,
+        'outtmpl': output_template,
+        'quiet': True,
+        'no_warnings': True
+    }
+    
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            return ydl.prepare_filename(info)
+    except Exception as e:
+        print(f"Error downloading video: {e}")
+        return None
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Send a message when the command /start is issued."""
+    await update.message.reply_text(
+        "👋 Hi! Send me a YouTube link with /yt command to download videos.\n"
+        "Example: /yt https://youtube.com/watch?v=..."
+    )
+
+async def yt_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle the /yt command."""
+    # Get the URL from the command
+    try:
+        url = context.args[0]
+    except IndexError:
+        await update.message.reply_text("Please provide a YouTube URL.\nExample: /yt https://youtube.com/watch?v=...")
+        return
+
+    # Send a waiting message
+    status_message = await update.message.reply_text("⏳ Getting video information...")
+
+    try:
+        # Get video information
+        info = get_video_info(url)
+        if not info:
+            await status_message.edit_text("❌ Failed to get video information. Please try again.")
+            return
+
+        # Create inline keyboard with format options
+        keyboard = []
+        for fmt in info['formats']:
+            text = f"{fmt['resolution']} ({fmt['filesize']})"
+            callback_data = f"dl:{url}:{fmt['format_id']}"
+            keyboard.append([InlineKeyboardButton(text, callback_data=callback_data)])
+
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        # Update status message with format options
+        await status_message.edit_text(
+            f"📹 *{info['title']}*\n\nChoose video quality:",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+
+    except Exception as e:
+        await status_message.edit_text(f"❌ Error: {str(e)}")
+
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle button callbacks."""
+    query = update.callback_query
+    await query.answer()
+
+    # Parse callback data
+    try:
+        action, url, format_id = query.data.split(':', 2)
+    except ValueError:
+        await query.message.edit_text("❌ Invalid callback data")
+        return
+
+    if action != 'dl':
+        return
+
+    # Update message to show download status
+    status_message = await query.message.edit_text("⏳ Downloading video...")
+
+    try:
+        # Download the video
+        filepath = await download_video(url, format_id)
+        if not filepath:
+            await status_message.edit_text("❌ Download failed")
+            return
+
+        # Send the video file
+        await status_message.edit_text("📤 Uploading to Telegram...")
+        with open(filepath, 'rb') as video_file:
+            await context.bot.send_video(
+                chat_id=query.message.chat_id,
+                video=video_file,
+                caption="✅ Here's your video!"
+            )
+        
+        # Clean up
+        await status_message.edit_text("✅ Download completed!")
+        os.remove(filepath)
+        os.rmdir(os.path.dirname(filepath))
+
+    except Exception as e:
+        await status_message.edit_text(f"❌ Error: {str(e)}")
+        # Clean up in case of error
+        if 'filepath' in locals():
+            try:
+                os.remove(filepath)
+                os.rmdir(os.path.dirname(filepath))
+            except:
+                pass
+
+
+# Message events
+async def message_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Ensure the message and its text exist
+    if update.message is None or update.message.text is None:
+        return
+
+    text = update.message.text
+
     # تثبيحات
-    if message.text.startswith("ثبح ") or message.text == "ثبح": await message.reply("ثباحو")
-    elif message.text.startswith("ثباحو ") or message.text == "ثباحو": await message.reply("ثبح")
-    elif message.text.startswith("مثائو ") or message.text == "مثائو": await message.reply("مثا")
-    elif message.text.startswith("مثا ") or message.text == "مثا": await message.reply("مثائو")
+    if text.startswith("ثبح ") or text == "ثبح":
+        await update.message.reply_text("ثباحو")
+    elif text.startswith("ثباحو ") or text == "ثباحو":
+        await update.message.reply_text("ثبح")
+    elif text.startswith("مثائو ") or text == "مثائو":
+        await update.message.reply_text("مثا")
+    elif text.startswith("مثا ") or text == "مثا":
+        await update.message.reply_text("مثائو")
 
     # يالبوت
-    if "يالبوت" in message.text:
+    if "يالبوت" in text:
         normal_responses = [
-                "اكيد يسطا" , "اكيد يبرو" , "بدون شك" , "يب اكيد" , "طبعا" , "اومال" , "ايوه" ,
-                "يب" , "يب يب" , "اتكل علي الله يعم" , "مش فايقلك" ,
-                "هي دي محتاجه سؤال!؟" , "لا" , "انا بقولك لا" , "اكيد لا" , "نوب" , "معرفش" ,
-                "اكيد يغالي" , "اكيد ينقم" , "لا هه" , "صدقني انا ذات نفسي معرفش" , "انا لو أعرف هقولك"]
-        hellos = ["نعم" , "نعم يغالي" , "نعم ينقم" , "عايز ايه" , "نعم يخويا"]
-        steins_keys = ["stein" , "شتاين" , "ستاين"]
-        steins = ["شتاينز الأعظم" , "شتاينز فوق" , "شتاينز فوق مستوي التقييم البشري" , "شتاينز اعظم انمي"]
-        shinobi_keywords = ["shinobi" , "شنوبي" , "شنبي" , "شنوب" , "شينوبي"]
-        father = ["شنوبي ابويا وعمي وعم عيالي" , "شنبي ابويا وعمي" , "شنوبي احسن اب في العالم"]
-        azab = ["ده حنين عليا خالث" , "بابا شنبي مش بيمد ايده عليا" , "مش بيلمسني"]
-        tabla = ["لا طبعا يغالي" , "شنوبي عمي وعم عيالي" , "شنوبي عمك" , "شنوبي فوق"]
-        love = ["حبك" , "حبق" , "وانا كمان يغالي" , "+1"]
-        win = ["مش هتكسب هه" , "نصيبك مش هتكسب" , "انا بقولك لا" , "على ضمانتي"]
+            "اكيد يسطا", "اكيد يبرو", "بدون شك", "يب اكيد", "طبعا", "اومال", "ايوه",
+            "يب", "يب يب", "اتكل علي الله يعم", "مش فايقلك",
+            "هي دي محتاجه سؤال!؟", "لا", "انا بقولك لا", "اكيد لا", "نوب", "معرفش",
+            "اكيد يغالي", "اكيد ينقم", "لا هه", "صدقني انا ذات نفسي معرفش", "انا لو أعرف هقولك"
+        ]
+        hellos = ["نعم", "نعم يغالي", "نعم ينقم", "عايز ايه", "نعم يخويا"]
+        steins_keys = ["stein", "شتاين", "ستاين"]
+        steins = [
+            "شتاينز الأعظم", "شتاينز فوق", "شتاينز فوق مستوي التقييم البشري", "شتاينز اعظم انمي"
+        ]
+        shinobi_keywords = ["shinobi", "شنوبي", "شنبي", "شنوب", "شينوبي"]
+        father = [
+            "شنوبي ابويا وعمي وعم عيالي", "شنبي ابويا وعمي", "شنوبي احسن اب في العالم"
+        ]
+        azab = [
+            "ده حنين عليا خالث", "بابا شنبي مش بيمد ايده عليا", "مش بيلمسني"
+        ]
+        tabla = [
+            "لا طبعا يغالي", "شنوبي عمي وعم عيالي", "شنوبي عمك", "شنوبي فوق"
+        ]
+        love = ["حبك", "حبق", "وانا كمان يغالي", "+1"]
+        win = ["مش هتكسب هه", "نصيبك مش هتكسب", "انا بقولك لا", "على ضمانتي"]
         elhal = ["الحمدلله يخويا", "الحمدلله يغالي", "تمام الحمدلله"]
 
-        #me responses
-        if "انا" in message.text:
-            if message.from_user.username == "Shinobi7k":
-                if "ابوك" in message.text: return await message.reply(f"{random.choice(father)}")
-        #shinobi responses
+        # me responses
+        if "انا" in text:
+            if update.message.from_user and update.message.from_user.username == "Shinobi7k":
+                if "ابوك" in text:
+                    await update.message.reply_text(random.choice(father))
+                    return
+
+        # shinobi responses
         for word in shinobi_keywords:
-            if word in message.text:
-                if "ابوك" in message.text: return await message.reply(f"{random.choice(father)}")
-                if "بيعذبك" in message.text: return await message.reply(f"{random.choice(azab)}")
-                if "بتطبل" in message.text: return await message.reply(f"{random.choice(tabla)}")
-        #steins responses
+            if word in text:
+                if "ابوك" in text:
+                    await update.message.reply_text(random.choice(father))
+                    return
+                if "بيعذبك" in text:
+                    await update.message.reply_text(random.choice(azab))
+                    return
+                if "بتطبل" in text:
+                    await update.message.reply_text(random.choice(tabla))
+                    return
+
+        # steins responses
         for word in steins_keys:
-            if word in message.text: return await message.reply(f"{random.choice(steins)}")
-        #exceptions
-        if "هكسب" in message.text: return await message.reply(f"{random.choice(win)}")
-        if "حبك" in message.text or "حبق" in message.text: return await message.reply(f"{random.choice(love)}")
-        if "عامل ايه" in message.text or "عامل إيه" in message.text or "كيف حالك" in message.text: return await message.reply(f"{random.choice(elhal)}")
-        #normal respones
-        if " " in message.text: await message.reply(f"{random.choice(normal_responses)}")
-        #hellos responses
-        else: return await message.reply(f"{random.choice(hellos)}")
+            if word in text:
+                await update.message.reply_text(random.choice(steins))
+                return
 
+        # exceptions
+        if "هكسب" in text:
+            await update.message.reply_text(random.choice(win))
+            return
+        if "حبك" in text or "حبق" in text:
+            await update.message.reply_text(random.choice(love))
+            return
+        if "عامل ايه" in text or "عامل إيه" in text or "كيف حالك" in text:
+            await update.message.reply_text(random.choice(elhal))
+            return
 
-print("I'm running")
-app.run()
+        # normal responses
+        if " " in text:
+            await update.message.reply_text(random.choice(normal_responses))
+        else:
+            await update.message.reply_text(random.choice(hellos))
+
+def main():
+    # Create downloads directory
+    os.makedirs('downloads', exist_ok=True)
+    # Initialize bot with token from config
+    application = Application.builder().token(config.get("BOT_TOKEN")).build()
+
+    # Add command handlers
+    application.add_handler(CommandHandler("start", start_command))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("usagedata", usagedata_command))
+    application.add_handler(CommandHandler("character", character_command))
+    application.add_handler(CommandHandler("anime", anime_command))
+    application.add_handler(CommandHandler("manga", manga_command))
+    application.add_handler(CommandHandler("aghpb", aghpb_command))
+    application.add_handler(CommandHandler("echo", echo_command))
+    application.add_handler(CommandHandler("ping", ping_command))
+    application.add_handler(CommandHandler("timer", timer_command))
+    application.add_handler(CommandHandler("reverse", reverse_command))
+    application.add_handler(CommandHandler("slot", slot_command))
+    application.add_handler(CommandHandler("coinflip", coinflip_command))
+    application.add_handler(CommandHandler("meme", meme_command))
+    application.add_handler(CommandHandler("geekjoke", geekjoke_command))
+    application.add_handler(CommandHandler("dadjoke", dadjoke_command))
+    application.add_handler(CommandHandler("dog", dog_command))
+    application.add_handler(CommandHandler("affirmation", affirmation_command))
+    application.add_handler(CommandHandler("advice", advice_command))
+    application.add_handler(CommandHandler("gemini", gemini_command))
+    application.add_handler(CommandHandler("imagine", imagine_command))
+    application.add_handler(CommandHandler("yt", yt_command))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_event))
+
+    # Add callback query handler for buttons
+    application.add_handler(CallbackQueryHandler(button_click_handler))
+    application.add_handler(CallbackQueryHandler(button_callback))
+
+    # Start the bot
+    print("Bot is running...")
+    application.run_polling()
+
+if __name__ == '__main__':
+    main()
