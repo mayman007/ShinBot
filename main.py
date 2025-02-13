@@ -81,7 +81,6 @@ async def start_command(update: Update, context):
 
 async def help_command(update: Update, context):
     await update.message.reply_text(
-        "Whether it's using free AI tools, searching internet or just having fun, I will surely come in handy.\n"
         "\nHere's my commands list:\n"
         "/advice - Get a random advice\n"
         "/affirmation - Get a random affirmation\n"
@@ -626,6 +625,26 @@ async def timer_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    # message_id = update.message.id
+    # chat_id = chat.id
+    # start_timestamp = int(datetime.datetime.now().timestamp())
+    
+    # print(message_id)
+    # print(chat_id)
+    # print(start_timestamp)
+    # print(datetime.timedelta(seconds=sleep_duration))
+
+    # async with aiosqlite.connect("database.db") as connection:
+    #     async with connection.cursor() as cursor:
+    #         await cursor.execute(
+    #             "CREATE TABLE IF NOT EXISTS timers (message_id ID, chat_id INTEGER, start_timestamp INTEGER, end_timestamp INTEGER, duration_in_seconds INTEGER, reason TEXT)"
+    #         )
+    #         await cursor.execute(
+    #             "INSERT INTO character (message_id, chat_id, start_timestamp, end_timestamp, duration_in_seconds, reason) VALUES (?, ?, ?, ?, ?, ?)",
+    #             (msg.message_id, 0, str(character_results_list))
+    #         )
+    #         await connection.commit()
+
     await asyncio.sleep(sleep_duration)
     try:
         if reason:
@@ -1112,7 +1131,7 @@ def main():
     # Create downloads directory
     os.makedirs('downloads', exist_ok=True)
     # Initialize bot with token from config
-    application = Application.builder().token(config.get("BOT_TOKEN")).build()
+    application = Application.builder().token(config.get("BOT_TOKEN")).concurrent_updates(True).build()
 
     # Add command handlers
     application.add_handler(CommandHandler("start", start_command))
