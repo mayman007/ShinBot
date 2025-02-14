@@ -5,6 +5,7 @@ with open("settings.yaml", "r") as file:
 
     # Get settings
     BOT_TOKEN = config.get("BOT_TOKEN")
+    BOT_USERNAME = config.get("BOT_USERNAME")
     ADMIN_ID = config.get("ADMIN_ID")
     GEMINI_API_KEY = config.get("GEMINI_API_KEY")
     HUGGINGFACE_TOKEN = config.get("HUGGINGFACE_TOKEN")

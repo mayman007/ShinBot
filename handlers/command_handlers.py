@@ -9,7 +9,7 @@ import time
 import praw
 from tcp_latency import measure_latency
 import google.generativeai as genai
-from config import ADMIN_ID, GEMINI_API_KEY, HUGGINGFACE_TOKEN, REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET, REDDIT_USER_AGENT
+from config import BOT_USERNAME, ADMIN_ID, GEMINI_API_KEY, HUGGINGFACE_TOKEN, REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET, REDDIT_USER_AGENT
 from main import save_usage
 
 # Usagedata command
@@ -133,7 +133,7 @@ async def manga_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await save_usage(chat, "manga")
 
     text = update.message.text
-    query = text.replace("/manga", "").replace("@shinobi7kbot", "").strip()
+    query = text.replace("/manga", "").replace(f"@{BOT_USERNAME}", "").strip()
     if not query:
         await update.message.reply_text("Please provide a search query.")
         return
@@ -214,7 +214,7 @@ async def anime_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await save_usage(chat, "anime")
 
     text = update.message.text
-    query = text.replace("/anime", "").replace("@shinobi7kbot", "").strip()
+    query = text.replace("/anime", "").replace(f"@{BOT_USERNAME}", "").strip()
     if not query:
         await update.message.reply_text("Please provide a search query.")
         return
@@ -332,7 +332,7 @@ async def echo_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await save_usage(chat, "echo")
 
     # Remove the command text and bot username from the message text
-    text = update.message.text.replace("/echo", "").replace("@shinobi7kbot", "").strip()
+    text = update.message.text.replace("/echo", "").replace(f"@{BOT_USERNAME}", "").strip()
     if text == "": await update.message.reply_text("Type something in the message")
     else: await update.message.reply_text(text)
 
@@ -364,7 +364,7 @@ async def timer_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await save_usage(chat, "timer")
 
     # Remove command and bot username from the text
-    message_text = update.message.text.replace("/timer", "").replace("@shinobi7kbot", "").strip()
+    message_text = update.message.text.replace("/timer", "").replace(f"@{BOT_USERNAME}", "").strip()
     if " " in message_text:
         parts = message_text.split(" ", 1)
         time_str = parts[0]
@@ -488,7 +488,7 @@ async def reverse_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     await save_usage(chat, "reverse")
 
-    your_words = update.message.text.replace("/reverse", "").replace("@shinobi7kbot", "").strip()
+    your_words = update.message.text.replace("/reverse", "").replace(f"@{BOT_USERNAME}", "").strip()
     if not your_words:
         await update.message.reply_text("Type some words.")
         return
@@ -631,7 +631,7 @@ async def gemini_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await save_usage(chat, "gemini")
 
     try:
-        prompt = update.message.text.replace("/gemini", "").replace("@shinobi7kbot", "").strip()
+        prompt = update.message.text.replace("/gemini", "").replace(f"@{BOT_USERNAME}", "").strip()
         if prompt == "":
             await update.message.reply_text("Please write your prompt on the same message.")
             return
@@ -659,7 +659,7 @@ async def imagine_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await save_usage(chat, "imagine")
 
     # Remove command and bot username from the message text.
-    something_to_imagine = update.message.text.replace("/imagine", "").replace("@shinobi7kbot", "").strip()
+    something_to_imagine = update.message.text.replace("/imagine", "").replace(f"@{BOT_USERNAME}", "").strip()
     if not something_to_imagine:
         await update.message.reply_text("You have to descripe the image.")
         return
