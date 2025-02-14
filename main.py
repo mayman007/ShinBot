@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 
 def main():
     # Create downloads directory
-    os.makedirs('downloads', exist_ok=True)
+    os.makedirs('db', exist_ok=True)
     # Initialize bot with token from config
     application = Application.builder().token(BOT_TOKEN).concurrent_updates(True).build()
 
