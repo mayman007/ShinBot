@@ -1,8 +1,8 @@
 python-telegram-bot
-yt-dlp
 aiohttp
 aiosqlite
 python-dotenv
 praw
 tcp_latency
 google-generativeai
+PyYAML
