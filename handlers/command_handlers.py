@@ -1,7 +1,5 @@
 import asyncio
-import datetime
 import io
-import os
 import aiohttp
 import aiosqlite
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -16,7 +14,7 @@ from main import save_usage
 
 # Usagedata command
 async def usagedata_command(update: Update, context):
-    if update.message.from_user.id == ADMIN_ID:
+    if update.message.from_user.id == int(ADMIN_ID):
         async with aiosqlite.connect("db/usage.db") as connection:
             async with connection.cursor() as cursor:
                 data = await cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
