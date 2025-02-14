@@ -1,14 +1,17 @@
+# Necessary values
 BOT_TOKEN: "YOUR_BOT_TOKEN" # Bot token
 BOT_USERNAME: "YOUR_BOT_USERNAME" # Bot username (without the "@")
 ADMIN_ID: "YOUR_ADMIN_ID" # Telegram user ID for bot administrator
+
+# Optional settings
+DEBUG: false
+ENABLE_GEMINI_COMMAND: false
+ENABLE_IMAGINE_COMMAND: false
+ENABLE_MEME_COMMAND: false
+
+# Fill each of these if you enabled their settings above
 GEMINI_API_KEY: "YOUR_GEMINI_API_KEY" # For /gemini command
 HUGGINGFACE_TOKEN: "YOUR_HUGGINGFACE_TOKEN" # For /imagine command
 REDDIT_CLIENT_ID: "YOUR_REDDIT_CLIENT_ID" # For /meme command
 REDDIT_CLIENT_SECRET: "YOUR_REDDIT_CLIENT_SECRET" # For /meme command
 REDDIT_USER_AGENT: "YOUR_REDDIT_USER_AGENT" # Also for /meme command
-
-# Optional settings
-DEBUG: false
-ENABLE_GEMINI_COMMAND: true
-ENABLE_IMAGINE_COMMAND: true
-ENABLE_MEME_COMMAND: true
