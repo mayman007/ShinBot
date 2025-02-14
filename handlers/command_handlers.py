@@ -658,29 +658,32 @@ async def imagine_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     await save_usage(chat, "imagine")
 
-    # Remove command and bot username from the message text.
-    something_to_imagine = update.message.text.replace("/imagine", "").replace(f"@{BOT_USERNAME}", "").strip()
-    if not something_to_imagine:
-        await update.message.reply_text("You have to descripe the image.")
-        return
+    try:
+        # Remove command and bot username from the message text.
+        something_to_imagine = update.message.text.replace("/imagine", "").replace(f"@{BOT_USERNAME}", "").strip()
+        if not something_to_imagine:
+            await update.message.reply_text("You have to descripe the image.")
+            return
 
-    # Send a waiting message to the user
-    waiting_msg = await update.message.reply_text("Wait a moment...")
+        # Send a waiting message to the user
+        waiting_msg = await update.message.reply_text("Wait a moment...")
 
-    API_URL = "https://api-inference.huggingface.co/models/prompthero/openjourney"
-    API_TOKEN = HUGGINGFACE_TOKEN
-    headers = {"Authorization": f"Bearer {API_TOKEN}"}
-    payload = {"inputs": f"{something_to_imagine}, mdjrny-v4 style"}
+        API_URL = "https://api-inference.huggingface.co/models/prompthero/openjourney"
+        API_TOKEN = HUGGINGFACE_TOKEN
+        headers = {"Authorization": f"Bearer {API_TOKEN}"}
+        payload = {"inputs": f"{something_to_imagine}, mdjrny-v4 style"}
 
-    # Send the request to the Hugging Face Inference API
-    async with aiohttp.ClientSession(headers=headers) as session:
-        async with session.post(API_URL, json=payload) as response:
-            image_bytes = await response.read()
+        # Send the request to the Hugging Face Inference API
+        async with aiohttp.ClientSession(headers=headers) as session:
+            async with session.post(API_URL, json=payload) as response:
+                image_bytes = await response.read()
 
-    # Convert the received bytes to a file-like object, set a filename, and send it
-    file = io.BytesIO(image_bytes)
-    file.name = "image.png"  # Set an appropriate filename and extension
-    await update.message.reply_photo(photo=file)
+        # Convert the received bytes to a file-like object, set a filename, and send it
+        file = io.BytesIO(image_bytes)
+        file.name = "image.png"  # Set an appropriate filename and extension
+        await update.message.reply_photo(photo=file)
 
-    # Delete the waiting message
-    await waiting_msg.delete()
+        # Delete the waiting message
+        await waiting_msg.delete()
+    except:
+        await update.message.reply_text("Sorry, I ran into an error.")
