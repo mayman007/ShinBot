@@ -1,5 +1,5 @@
 import logging.config
-from utils.logger import logger, LOGGING_CONFIG, DEBUG
+from utils.logger import LOGGING_CONFIG
 import os
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
 from config import BOT_TOKEN, ENABLE_GEMINI_COMMAND, ENABLE_IMAGINE_COMMAND, ENABLE_MEME_COMMAND
