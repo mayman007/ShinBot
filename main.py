@@ -1,51 +1,20 @@
-import logging
+import logging.config
+from utils.logger import logger, LOGGING_CONFIG, DEBUG
 import os
-import aiosqlite
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
-from config import BOT_TOKEN, DEBUG, ENABLE_GEMINI_COMMAND, ENABLE_IMAGINE_COMMAND, ENABLE_MEME_COMMAND
+from config import BOT_TOKEN, ENABLE_GEMINI_COMMAND, ENABLE_IMAGINE_COMMAND, ENABLE_MEME_COMMAND
 import handlers.command_handlers as command_handlers
 import handlers.message_handlers as messages_event_handlers
 import handlers.callback_handlers as callback_handlers
 
-# Save Commands Usage in Database
-async def save_usage(chat_object, command_name: str):
-    if chat_object.type in ['group', 'supergroup']:
-        chat_id = str(chat_object.id)
-        chat_name = str(chat_object.title)
-        chat_type = str(chat_object.type)
-        # chat_members = str(chat_object.get_member_count())
-        # chat_invite = str(chat_object.invite_link if chat_object.invite_link else "_")
-        chat_members = "idk"
-        chat_invite = "idk"
-    elif chat_object.type in ['private', 'bot']:
-        chat_id = str(chat_object.id)
-        chat_name = str(chat_object.username if chat_object.username else chat_object.first_name)
-        chat_type = str(chat_object.type)
-        chat_members = str("_")
-        chat_invite = str("_")
-        
-    async with aiosqlite.connect("db/usage.db") as connection:
-        async with connection.cursor() as cursor:
-            await cursor.execute(f"CREATE TABLE IF NOT EXISTS {command_name} (id TEXT, name TEXT, usage INTEGER, type TEXT, members TEXT, invite TEXT)")
-            cursor = await cursor.execute(f"SELECT * FROM {command_name} WHERE id = ?", (chat_id,))
-            row = await cursor.fetchone()
-            if row == None:
-                await cursor.execute(f"INSERT INTO {command_name} (id, name, usage, type, members, invite) VALUES (?, ?, ?, ?, ?, ?)", (chat_id, chat_name, 1, chat_type, chat_members, chat_invite,))
-            else:
-                await cursor.execute(f"UPDATE {command_name} SET usage = ? WHERE id = ?", (row[2] + 1, chat_id))
-            await connection.commit()
-
-
-# Set up logging to help with debugging
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO if DEBUG else logging.WARNING
-)
-logger = logging.getLogger(__name__)
 
 def main():
     # Create db directory
     os.makedirs('db', exist_ok=True)
+
+    # Initialize logger
+    logging.config.dictConfig(LOGGING_CONFIG)
+
     # Initialize bot with token from config
     application = Application.builder().token(BOT_TOKEN).concurrent_updates(True).build()
 

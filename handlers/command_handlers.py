@@ -10,7 +10,7 @@ import praw
 from tcp_latency import measure_latency
 import google.generativeai as genai
 from config import BOT_USERNAME, ADMIN_ID, GEMINI_API_KEY, HUGGINGFACE_TOKEN, REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET, REDDIT_USER_AGENT
-from main import save_usage
+from utils.usage import save_usage
 
 # Usagedata command
 async def usagedata_command(update: Update, context):
