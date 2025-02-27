@@ -9,20 +9,18 @@ from telegram.ext import ContextTypes
 
 # Maximum download filesize limit (2GB in bytes)
 MAX_FILESIZE = 2147483648
-# Threshold for sending as document (40 MB)
-DOCUMENT_THRESHOLD = 40 * 1024 * 1024
 # Timeout values (in seconds) for sending media (now 180 sec)
 SEND_TIMEOUT = 180
 # Path to your cookies file (if needed)
 COOKIES_FILE = 'cookies.txt'
 
 def add_cookies_to_opts(opts: dict) -> dict:
-    """Add cookiefile and restrict-filenames options if available."""
+    """Add cookiefile and restrictfilenames options if available."""
     if os.path.exists(COOKIES_FILE):
         opts['cookiefile'] = COOKIES_FILE
     # Ensure filenames are restricted
-    if 'restrict-filenames' not in opts:
-        opts['restrict-filenames'] = True
+    if 'restrictfilenames' not in opts:
+        opts['restrictfilenames'] = True
     return opts
 
 def sanitize_filename(filename: str) -> str:
@@ -153,6 +151,7 @@ def download_video(url, video_format_id, best_audio, stream_type, resolution):
     Download the YouTube video using yt-dlp.
     For adaptive streams (video-only) with best_audio available, merges audio.
     Saves the file in the "downloads" folder using a Windows-safe filename that includes the resolution.
+    Forces re-encoding of audio using AAC.
     Returns a tuple (final_filename, safe_title).
     """
     with yt_dlp.YoutubeDL(add_cookies_to_opts({})) as ydl:
@@ -168,9 +167,9 @@ def download_video(url, video_format_id, best_audio, stream_type, resolution):
         'format': fmt_str,
         'merge_output_format': 'mp4',
         'windowsfilenames': True,
-        'restrict-filenames': True,
         'outtmpl': outtmpl,
         'max_filesize': MAX_FILESIZE,
+        'postprocessor_args': ['-c:a', 'aac'],
     })
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.extract_info(url, download=True)
@@ -190,7 +189,6 @@ def download_audio_by_format(url, audio_format_id, quality_str):
     ydl_opts = add_cookies_to_opts({
         'format': audio_format_id,
         'windowsfilenames': True,
-        'restrict-filenames': True,
         'outtmpl': expected_template,
         'max_filesize': MAX_FILESIZE,
         'postprocessors': [{
@@ -216,7 +214,6 @@ def download_audio_mp3(url):
     ydl_opts = add_cookies_to_opts({
         'format': 'bestaudio',
         'windowsfilenames': True,
-        'restrict-filenames': True,
         'outtmpl': expected_filename,
         'max_filesize': MAX_FILESIZE,
         'postprocessors': [{
@@ -359,7 +356,7 @@ async def yt_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def yt_quality_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     CallbackQuery handler for video quality buttons.
-    Downloads the selected video and sends it as a video (or document if >40MB), then deletes the file.
+    Downloads the selected video and sends it as a video, then deletes the file.
     """
     query = update.callback_query
     await query.answer()
@@ -385,30 +382,17 @@ async def yt_quality_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(f"Downloading video at {resolution}...")
     filename, safe_title = await asyncio.to_thread(download_video, video_url, video_format_id, best_audio, stream_type, resolution)
     try:
-        file_size = os.path.getsize(filename)
         with open(filename, "rb") as f:
-            if file_size > DOCUMENT_THRESHOLD:
-                await context.bot.send_document(
-                    chat_id=update.effective_chat.id,
-                    document=f,
-                    caption=safe_title,
-                    reply_to_message_id=query.message.message_id,
-                    read_timeout=SEND_TIMEOUT,
-                    write_timeout=SEND_TIMEOUT,
-                    pool_timeout=SEND_TIMEOUT,
-                    connect_timeout=SEND_TIMEOUT
-                )
-            else:
-                await context.bot.send_video(
-                    chat_id=update.effective_chat.id,
-                    video=f,
-                    caption=safe_title,
-                    reply_to_message_id=query.message.message_id,
-                    read_timeout=SEND_TIMEOUT,
-                    write_timeout=SEND_TIMEOUT,
-                    pool_timeout=SEND_TIMEOUT,
-                    connect_timeout=SEND_TIMEOUT
-                )
+            await context.bot.send_video(
+                chat_id=update.effective_chat.id,
+                video=f,
+                caption=safe_title,
+                reply_to_message_id=query.message.message_id,
+                read_timeout=SEND_TIMEOUT,
+                write_timeout=SEND_TIMEOUT,
+                pool_timeout=SEND_TIMEOUT,
+                connect_timeout=SEND_TIMEOUT
+            )
     except Exception as e:
         await query.edit_message_text(f"Error uploading video: {e}")
     finally:
