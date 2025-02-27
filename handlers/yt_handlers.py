@@ -7,7 +7,13 @@ from io import BytesIO
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 
-# Path to your cookies file (exported from your browser)
+# Maximum download filesize limit (2GB in bytes)
+MAX_FILESIZE = 2147483648
+# Threshold for sending as document (40 MB)
+DOCUMENT_THRESHOLD = 40 * 1024 * 1024
+# Timeout (in seconds) for sending media (now 180 sec)
+SEND_TIMEOUT = 180
+# Path to your cookies file (if needed)
 COOKIES_FILE = 'cookies.txt'
 
 def add_cookies_to_opts(opts: dict) -> dict:
@@ -161,6 +167,7 @@ def download_video(url, video_format_id, best_audio, stream_type, resolution):
         'restrictfilenames': True,
         'windowsfilenames': True,
         'outtmpl': outtmpl,
+        'max_filesize': MAX_FILESIZE,
     })
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.extract_info(url, download=True)
@@ -182,6 +189,7 @@ def download_audio_by_format(url, audio_format_id, quality_str):
         'restrictfilenames': True,
         'windowsfilenames': True,
         'outtmpl': expected_template,
+        'max_filesize': MAX_FILESIZE,
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -208,6 +216,7 @@ def download_audio_mp3(url):
         'restrictfilenames': True,
         'windowsfilenames': True,
         'outtmpl': outtmpl,
+        'max_filesize': MAX_FILESIZE,
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -343,12 +352,12 @@ async def yt_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['yt_audio'] = audio_options
 
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("Choose video quality or audio (MP3):", reply_markup=reply_markup)
+    await update.message.reply_text("Choose video quality or audio:", reply_markup=reply_markup)
 
 async def yt_quality_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     CallbackQuery handler for video quality buttons.
-    Downloads the selected video and sends it as a video, then deletes the file.
+    Downloads the selected video and sends it as a video (or document if >40MB), then deletes the file.
     """
     query = update.callback_query
     await query.answer()
@@ -374,11 +383,30 @@ async def yt_quality_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(f"Downloading video at {resolution}...")
     filename, safe_title = await asyncio.to_thread(download_video, video_url, video_format_id, best_audio, stream_type, resolution)
     try:
+        file_size = os.path.getsize(filename)
         with open(filename, "rb") as f:
-            await context.bot.send_video(chat_id=update.effective_chat.id,
-                                           video=f,
-                                           caption=safe_title,
-                                           reply_to_message_id=query.message.message_id)
+            if file_size > DOCUMENT_THRESHOLD:
+                await context.bot.send_document(
+                    chat_id=update.effective_chat.id,
+                    document=f,
+                    caption=safe_title,
+                    reply_to_message_id=query.message.message_id,
+                    read_timeout=SEND_TIMEOUT,
+                    write_timeout=SEND_TIMEOUT,
+                    pool_timeout=SEND_TIMEOUT,
+                    connect_timeout=SEND_TIMEOUT
+                )
+            else:
+                await context.bot.send_video(
+                    chat_id=update.effective_chat.id,
+                    video=f,
+                    caption=safe_title,
+                    reply_to_message_id=query.message.message_id,
+                    read_timeout=SEND_TIMEOUT,
+                    write_timeout=SEND_TIMEOUT,
+                    pool_timeout=SEND_TIMEOUT,
+                    connect_timeout=SEND_TIMEOUT
+                )
     except Exception as e:
         await query.edit_message_text(f"Error uploading video: {e}")
     finally:
@@ -414,10 +442,16 @@ async def yt_audio_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             file_data = f.read()
         bio = BytesIO(file_data)
         bio.name = os.path.basename(filename)
-        await context.bot.send_audio(chat_id=update.effective_chat.id,
-                                       audio=bio,
-                                       caption=f"{safe_title} - {selected['abr']} kbps",
-                                       reply_to_message_id=query.message.message_id)
+        await context.bot.send_audio(
+            chat_id=update.effective_chat.id,
+            audio=bio,
+            caption=f"{safe_title} - {selected['abr']} kbps",
+            reply_to_message_id=query.message.message_id,
+            read_timeout=SEND_TIMEOUT,
+            write_timeout=SEND_TIMEOUT,
+            pool_timeout=SEND_TIMEOUT,
+            connect_timeout=SEND_TIMEOUT
+        )
     except Exception as e:
         await query.edit_message_text(f"Error sending audio: {e}")
     finally:
@@ -454,10 +488,16 @@ async def yt_subs_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             file_bytes = f.read()
         bio = BytesIO(file_bytes)
         bio.name = os.path.basename(filename)
-        await context.bot.send_document(chat_id=update.effective_chat.id,
-                                        document=bio,
-                                        caption=f"Subtitles ({lang}) for {safe_title}",
-                                        reply_to_message_id=query.message.message_id)
+        await context.bot.send_document(
+            chat_id=update.effective_chat.id,
+            document=bio,
+            caption=f"Subtitles ({lang}) for {safe_title}",
+            reply_to_message_id=query.message.message_id,
+            read_timeout=SEND_TIMEOUT,
+            write_timeout=SEND_TIMEOUT,
+            pool_timeout=SEND_TIMEOUT,
+            connect_timeout=SEND_TIMEOUT
+        )
     except Exception as e:
         await query.edit_message_text(f"Error sending subtitles: {e}")
     finally:
