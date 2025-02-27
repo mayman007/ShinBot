@@ -7,8 +7,6 @@ from io import BytesIO
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 
-# Maximum download filesize limit (2GB in bytes)
-MAX_FILESIZE = 2147483648
 # Path to your cookies file (exported from your browser)
 COOKIES_FILE = 'cookies.txt'
 
@@ -163,7 +161,6 @@ def download_video(url, video_format_id, best_audio, stream_type, resolution):
         'restrictfilenames': True,
         'windowsfilenames': True,
         'outtmpl': outtmpl,
-        'max_filesize': MAX_FILESIZE,
     })
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.extract_info(url, download=True)
@@ -185,7 +182,6 @@ def download_audio_by_format(url, audio_format_id, quality_str):
         'restrictfilenames': True,
         'windowsfilenames': True,
         'outtmpl': expected_template,
-        'max_filesize': MAX_FILESIZE,
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -212,7 +208,6 @@ def download_audio_mp3(url):
         'restrictfilenames': True,
         'windowsfilenames': True,
         'outtmpl': outtmpl,
-        'max_filesize': MAX_FILESIZE,
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
