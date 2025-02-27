@@ -168,6 +168,7 @@ def download_video(url, video_format_id, best_audio, stream_type, resolution):
         'format': fmt_str,
         'merge_output_format': 'mp4',
         'windowsfilenames': True,
+        'restrict-filenames': True,
         'outtmpl': outtmpl,
         'max_filesize': MAX_FILESIZE,
     })
@@ -189,6 +190,7 @@ def download_audio_by_format(url, audio_format_id, quality_str):
     ydl_opts = add_cookies_to_opts({
         'format': audio_format_id,
         'windowsfilenames': True,
+        'restrict-filenames': True,
         'outtmpl': expected_template,
         'max_filesize': MAX_FILESIZE,
         'postprocessors': [{
@@ -214,6 +216,7 @@ def download_audio_mp3(url):
     ydl_opts = add_cookies_to_opts({
         'format': 'bestaudio',
         'windowsfilenames': True,
+        'restrict-filenames': True,
         'outtmpl': expected_filename,
         'max_filesize': MAX_FILESIZE,
         'postprocessors': [{
