@@ -156,6 +156,7 @@ def download_video(url, video_format_id, best_audio, stream_type, resolution):
         'windowsfilenames': True,
         'outtmpl': outtmpl,
         'max_filesize': MAX_FILESIZE,
+        'cookiefile': 'cookies.txt',
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.extract_info(url, download=True)
@@ -183,6 +184,7 @@ def download_audio_by_format(url, audio_format_id, quality_str):
             'preferredcodec': 'mp3',
             'preferredquality': '192',
         }],
+        'cookiefile': 'cookies.txt',
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
@@ -210,6 +212,7 @@ def download_audio_mp3(url):
             'preferredcodec': 'mp3',
             'preferredquality': '192',
         }],
+        'cookiefile': 'cookies.txt',
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.extract_info(url, download=True)
@@ -233,6 +236,7 @@ def download_subtitles(url, lang, safe_title):
         'subtitlesformat': 'srt',
         'outtmpl': outtmpl,
         'quiet': True,
+        'cookiefile': 'cookies.txt',
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])

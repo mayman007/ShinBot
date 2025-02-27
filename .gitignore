@@ -1,5 +1,6 @@
 settings.yaml
 logging.log
+cookies.txt
 venv/
 db/
 __pycache__/
