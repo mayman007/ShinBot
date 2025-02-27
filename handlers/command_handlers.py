@@ -68,7 +68,8 @@ async def help_command(update: Update, context):
         "/ping - Get bot's latency\n"
         "/reverse - Reverse your words\n"
         "/slot - A slot game\n"
-        "/timer - Set yourself a timer\n",
+        "/timer - Set yourself a timer\n"
+        "/yt - Download videos from youtube and other sites\n",
     )
 
 # Handler for character search

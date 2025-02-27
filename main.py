@@ -6,11 +6,13 @@ from config import BOT_TOKEN, ENABLE_GEMINI_COMMAND, ENABLE_IMAGINE_COMMAND, ENA
 import handlers.command_handlers as command_handlers
 import handlers.message_handlers as messages_event_handlers
 import handlers.callback_handlers as callback_handlers
+from handlers.yt_handlers import yt_audio_button, yt_command, yt_quality_button, yt_subs_callback
 
 
 def main():
-    # Create db directory
+    # Create db and downloads directory
     os.makedirs('db', exist_ok=True)
+    os.makedirs("downloads", exist_ok=True)
 
     # Initialize logger
     logging.config.dictConfig(LOGGING_CONFIG)
@@ -40,6 +42,12 @@ def main():
     application.add_handler(CommandHandler("advice", command_handlers.advice_command))
     if ENABLE_GEMINI_COMMAND: application.add_handler(CommandHandler("gemini", command_handlers.gemini_command))
     if ENABLE_IMAGINE_COMMAND: application.add_handler(CommandHandler("imagine", command_handlers.imagine_command))
+
+    # Add YouTube command handlers
+    application.add_handler(CommandHandler("yt", yt_command))
+    application.add_handler(CallbackQueryHandler(yt_quality_button, pattern=r"^yt_\d+"))
+    application.add_handler(CallbackQueryHandler(yt_audio_button, pattern=r'^yt_audio_\d+'))
+    application.add_handler(CallbackQueryHandler(yt_subs_callback, pattern=r'^subs_'))
 
     # Add messages events handlers
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, messages_event_handlers.message_event))

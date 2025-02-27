@@ -6,3 +6,4 @@ praw
 tcp_latency
 google-generativeai
 PyYAML
+yt-dlp
