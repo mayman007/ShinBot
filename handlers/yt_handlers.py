@@ -11,15 +11,18 @@ from telegram.ext import ContextTypes
 MAX_FILESIZE = 2147483648
 # Threshold for sending as document (40 MB)
 DOCUMENT_THRESHOLD = 40 * 1024 * 1024
-# Timeout (in seconds) for sending media (now 180 sec)
+# Timeout values (in seconds) for sending media (now 180 sec)
 SEND_TIMEOUT = 180
 # Path to your cookies file (if needed)
 COOKIES_FILE = 'cookies.txt'
 
 def add_cookies_to_opts(opts: dict) -> dict:
-    """Add a cookiefile option if the cookies file exists."""
+    """Add cookiefile and restrictfilenames options if available."""
     if os.path.exists(COOKIES_FILE):
         opts['cookiefile'] = COOKIES_FILE
+    # Ensure filenames are restricted
+    if 'restrictfilenames' not in opts:
+        opts['restrictfilenames'] = True
     return opts
 
 def sanitize_filename(filename: str) -> str:
@@ -164,7 +167,6 @@ def download_video(url, video_format_id, best_audio, stream_type, resolution):
     ydl_opts = add_cookies_to_opts({
         'format': fmt_str,
         'merge_output_format': 'mp4',
-        'restrictfilenames': True,
         'windowsfilenames': True,
         'outtmpl': outtmpl,
         'max_filesize': MAX_FILESIZE,
@@ -186,7 +188,6 @@ def download_audio_by_format(url, audio_format_id, quality_str):
     expected_template = os.path.join("downloads", f"{safe_title}.{quality_str}.%(ext)s")
     ydl_opts = add_cookies_to_opts({
         'format': audio_format_id,
-        'restrictfilenames': True,
         'windowsfilenames': True,
         'outtmpl': expected_template,
         'max_filesize': MAX_FILESIZE,
@@ -210,12 +211,10 @@ def download_audio_mp3(url):
         info = ydl.extract_info(url, download=False)
     safe_title = sanitize_filename(info.get("title", "audio"))
     expected_filename = os.path.join("downloads", f"{safe_title}.mp3")
-    outtmpl = expected_filename
     ydl_opts = add_cookies_to_opts({
         'format': 'bestaudio',
-        'restrictfilenames': True,
         'windowsfilenames': True,
-        'outtmpl': outtmpl,
+        'outtmpl': expected_filename,
         'max_filesize': MAX_FILESIZE,
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
