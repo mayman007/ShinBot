@@ -9,6 +9,14 @@ from telegram.ext import ContextTypes
 
 # Maximum download filesize limit (2GB in bytes)
 MAX_FILESIZE = 2147483648
+# Path to your cookies file (exported from your browser)
+COOKIES_FILE = 'cookies.txt'
+
+def add_cookies_to_opts(opts: dict) -> dict:
+    """Add a cookiefile option if the cookies file exists."""
+    if os.path.exists(COOKIES_FILE):
+        opts['cookiefile'] = COOKIES_FILE
+    return opts
 
 def sanitize_filename(filename: str) -> str:
     """
@@ -55,7 +63,7 @@ def list_video_options(url):
     Group options by resolution (keeping the one with the larger total size).
     Returns (info, video_options, best_audio).
     """
-    with yt_dlp.YoutubeDL({}) as ydl:
+    with yt_dlp.YoutubeDL(add_cookies_to_opts({})) as ydl:
         info = ydl.extract_info(url, download=False)
     best_audio = get_best_audio(info)
     candidates = []
@@ -104,7 +112,7 @@ def list_audio_options(url):
     Duplicate options (by the same abr) are removed.
     Returns a list of dictionaries with keys: 'format', 'abr', 'filesize'.
     """
-    with yt_dlp.YoutubeDL({}) as ydl:
+    with yt_dlp.YoutubeDL(add_cookies_to_opts({})) as ydl:
         info = ydl.extract_info(url, download=False)
     audio_candidates = []
     for fmt in info.get("formats", []):
@@ -140,7 +148,7 @@ def download_video(url, video_format_id, best_audio, stream_type, resolution):
     Saves the file in the "downloads" folder using a Windows-safe filename that includes the resolution.
     Returns a tuple (final_filename, safe_title).
     """
-    with yt_dlp.YoutubeDL({}) as ydl:
+    with yt_dlp.YoutubeDL(add_cookies_to_opts({})) as ydl:
         info = ydl.extract_info(url, download=False)
     safe_title = sanitize_filename(info.get("title", "video"))
     expected_filename = os.path.join("downloads", f"{safe_title} - {resolution}.mp4")
@@ -149,15 +157,14 @@ def download_video(url, video_format_id, best_audio, stream_type, resolution):
     else:
         fmt_str = video_format_id
     outtmpl = expected_filename
-    ydl_opts = {
+    ydl_opts = add_cookies_to_opts({
         'format': fmt_str,
         'merge_output_format': 'mp4',
         'restrictfilenames': True,
         'windowsfilenames': True,
         'outtmpl': outtmpl,
         'max_filesize': MAX_FILESIZE,
-        'cookiefile': 'cookies.txt',
-    }
+    })
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.extract_info(url, download=True)
     return expected_filename, safe_title
@@ -169,11 +176,11 @@ def download_audio_by_format(url, audio_format_id, quality_str):
     is named: <sanitized_title>.<quality_str>.mp3 (only one .mp3 appended).
     Returns a tuple (final_filename, safe_title).
     """
-    with yt_dlp.YoutubeDL({}) as ydl:
+    with yt_dlp.YoutubeDL(add_cookies_to_opts({})) as ydl:
         info = ydl.extract_info(url, download=False)
     safe_title = sanitize_filename(info.get("title", "audio"))
     expected_template = os.path.join("downloads", f"{safe_title}.{quality_str}.%(ext)s")
-    ydl_opts = {
+    ydl_opts = add_cookies_to_opts({
         'format': audio_format_id,
         'restrictfilenames': True,
         'windowsfilenames': True,
@@ -184,8 +191,7 @@ def download_audio_by_format(url, audio_format_id, quality_str):
             'preferredcodec': 'mp3',
             'preferredquality': '192',
         }],
-        'cookiefile': 'cookies.txt',
-    }
+    })
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
     final_filename = os.path.join("downloads", f"{safe_title}.{quality_str}.mp3")
@@ -196,12 +202,12 @@ def download_audio_mp3(url):
     Download the best available audio (converted to MP3) using yt-dlp.
     This function is kept for backward compatibility.
     """
-    with yt_dlp.YoutubeDL({}) as ydl:
+    with yt_dlp.YoutubeDL(add_cookies_to_opts({})) as ydl:
         info = ydl.extract_info(url, download=False)
     safe_title = sanitize_filename(info.get("title", "audio"))
     expected_filename = os.path.join("downloads", f"{safe_title}.mp3")
     outtmpl = expected_filename
-    ydl_opts = {
+    ydl_opts = add_cookies_to_opts({
         'format': 'bestaudio',
         'restrictfilenames': True,
         'windowsfilenames': True,
@@ -212,8 +218,7 @@ def download_audio_mp3(url):
             'preferredcodec': 'mp3',
             'preferredquality': '192',
         }],
-        'cookiefile': 'cookies.txt',
-    }
+    })
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.extract_info(url, download=True)
     return expected_filename, safe_title
@@ -228,7 +233,7 @@ def download_subtitles(url, lang, safe_title):
     """
     outtmpl = os.path.join("downloads", safe_title)
     sub_lang = "en.*" if lang.lower().startswith("en") else lang
-    ydl_opts = {
+    ydl_opts = add_cookies_to_opts({
         'skip_download': True,
         'writesubtitles': True,
         'writeautomaticsub': True,
@@ -236,8 +241,7 @@ def download_subtitles(url, lang, safe_title):
         'subtitlesformat': 'srt',
         'outtmpl': outtmpl,
         'quiet': True,
-        'cookiefile': 'cookies.txt',
-    }
+    })
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
     
@@ -279,8 +283,8 @@ async def yt_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if subs_requested:
-        fetching_subs_message = await update.message.reply_text("Fetching subtitle info, please wait...")
-        info = await asyncio.to_thread(lambda: yt_dlp.YoutubeDL({}).extract_info(video_url, download=False))
+        await update.message.reply_text("Fetching subtitle info, please wait...")
+        info = await asyncio.to_thread(lambda: yt_dlp.YoutubeDL(add_cookies_to_opts({})).extract_info(video_url, download=False))
         safe_title = sanitize_filename(info.get("title", "subtitle"))
         # Build a union of manually provided subtitles and auto-generated captions,
         # filtering out any track that includes "live_chat"
@@ -301,7 +305,7 @@ async def yt_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         subs_data = {lang: tracks for lang, tracks in subs_data.items() if tracks}
 
         if not subs_data:
-            await fetching_subs_message.edit_text("No subtitles available for this video.")
+            await update.message.reply_text("No subtitles available for this video.")
             return
 
         keyboard = []
@@ -313,11 +317,11 @@ async def yt_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             'video_url': video_url,
             'safe_title': safe_title,
         }
-        await fetching_subs_message.edit_text("Choose subtitle language:", reply_markup=reply_markup)
+        await update.message.reply_text("Choose subtitle language:", reply_markup=reply_markup)
         return
 
     # For video and audio downloads:
-    fetching_vid_message = await update.message.reply_text("Fetching video info, please wait...")
+    await update.message.reply_text("Fetching video info, please wait...")
     info, video_options, best_audio = await asyncio.to_thread(list_video_options, video_url)
     context.user_data['yt_data'] = {
         'video_url': video_url,
@@ -325,7 +329,6 @@ async def yt_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         'best_audio': best_audio,
     }
     keyboard = []
-    keyboard.append([InlineKeyboardButton("Video Options:", callback_data="ignore")])
     for i, option in enumerate(video_options):
         resolution = option['resolution']
         stream_type = option['stream_type']
@@ -345,7 +348,7 @@ async def yt_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['yt_audio'] = audio_options
 
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await fetching_vid_message.edit_text("Choose video quality or audio (MP3):", reply_markup=reply_markup)
+    await update.message.reply_text("Choose video quality or audio (MP3):", reply_markup=reply_markup)
 
 async def yt_quality_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
