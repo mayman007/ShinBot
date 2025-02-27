@@ -17,12 +17,12 @@ SEND_TIMEOUT = 180
 COOKIES_FILE = 'cookies.txt'
 
 def add_cookies_to_opts(opts: dict) -> dict:
-    """Add cookiefile and restrictfilenames options if available."""
+    """Add cookiefile and restrict-filenames options if available."""
     if os.path.exists(COOKIES_FILE):
         opts['cookiefile'] = COOKIES_FILE
     # Ensure filenames are restricted
-    if 'restrictfilenames' not in opts:
-        opts['restrictfilenames'] = True
+    if 'restrict-filenames' not in opts:
+        opts['restrict-filenames'] = True
     return opts
 
 def sanitize_filename(filename: str) -> str:
