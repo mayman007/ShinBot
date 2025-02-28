@@ -1,29 +1,29 @@
+from telethon import TelegramClient, events
+from telethon.tl.custom import Button
 import aiosqlite
 import ast
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
-from telegram.ext import ContextTypes
-
 
 # ---------- Callback Query Handler for Pagination ----------
-async def button_click_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    data = query.data
-
+@events.register(events.CallbackQuery)
+async def button_click_handler(event):
+    data = event.data.decode('utf-8')
+    
     if data.startswith("anime"):
         async with aiosqlite.connect("db/database.db") as connection:
             async with connection.cursor() as cursor:
                 await cursor.execute(
-                    "SELECT * FROM anime WHERE message_id = ?", (str(query.message.message_id),)
+                    "SELECT * FROM anime WHERE message_id = ?", (str(event.message_id),)
                 )
                 db_data = await cursor.fetchall()
 
         if not db_data:
-            await query.answer("No data found.")
+            await event.answer("No data found.")
             return
 
         current_index = db_data[0][1]
         anime_results_list = ast.literal_eval(db_data[0][2].replace("'", "\"").replace("None", "\"None\""))
         btn_type = "prev" if "prev" in data else "next" if "next" in data else None
+        
         if current_index == 0:
             prev_index = 0
             next_index = 1
@@ -36,7 +36,7 @@ async def button_click_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 
         updated_index = prev_index if btn_type == "prev" else next_index if btn_type == "next" else current_index
         if updated_index == current_index:
-            await query.answer()
+            await event.answer()
             return
 
         image_link = anime_results_list[updated_index]['image_url']
@@ -53,41 +53,35 @@ async def button_click_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             f"**🧬 Source:** {anime_results_list[updated_index]['source']}"
         )
 
-        if anime_results_list[updated_index]['trailer'] in (None, "None"):
-            buttons = InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton("Previous", callback_data="animeprev"),
-                    InlineKeyboardButton("Next", callback_data="animenext")
-                ],
-                [
-                    InlineKeyboardButton("Open in MAL", url=anime_results_list[updated_index]['url'])
-                ]
-            ])
-        else:
-            buttons = InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton("Previous", callback_data="animeprev"),
-                    InlineKeyboardButton("Next", callback_data="animenext")
-                ],
-                [
-                    InlineKeyboardButton("Open in MAL", url=anime_results_list[updated_index]['url'])
-                ],
-                [
-                    InlineKeyboardButton("Watch Trailer", url=anime_results_list[updated_index]['trailer'])
-                ]
+        buttons = []
+        # Navigation buttons
+        buttons.append([
+            Button.inline("Previous", b"animeprev"),
+            Button.inline("Next", b"animenext")
+        ])
+        # MAL button
+        buttons.append([
+            Button.url("Open in MAL", anime_results_list[updated_index]['url'])
+        ])
+        # Trailer button (if available)
+        if anime_results_list[updated_index]['trailer'] not in (None, "None"):
+            buttons.append([
+                Button.url("Watch Trailer", anime_results_list[updated_index]['trailer'])
             ])
 
-        await query.message.edit_media(
-            media=InputMediaPhoto(media=image_link, caption=message_content)
+        # Edit the message with new content and buttons
+        await event.edit(
+            file=image_link,
+            text=message_content,
+            buttons=buttons
         )
-        await query.message.edit_reply_markup(reply_markup=buttons)
-        await query.answer()
+        await event.answer()
 
         async with aiosqlite.connect("db/database.db") as connection:
             async with connection.cursor() as cursor:
                 await cursor.execute(
                     "UPDATE anime SET current_index = ? WHERE message_id = ?",
-                    (updated_index, str(query.message.message_id))
+                    (updated_index, str(event.message_id))
                 )
                 await connection.commit()
 
@@ -95,17 +89,18 @@ async def button_click_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         async with aiosqlite.connect("db/database.db") as connection:
             async with connection.cursor() as cursor:
                 await cursor.execute(
-                    "SELECT * FROM manga WHERE message_id = ?", (str(query.message.message_id),)
+                    "SELECT * FROM manga WHERE message_id = ?", (str(event.message_id),)
                 )
                 db_data = await cursor.fetchall()
 
         if not db_data:
-            await query.answer("No data found.")
+            await event.answer("No data found.")
             return
 
         current_index = db_data[0][1]
         manga_results_list = ast.literal_eval(db_data[0][2].replace("'", "\"").replace("None", "\"None\""))
         btn_type = "prev" if "prev" in data else "next" if "next" in data else None
+        
         if current_index == 0:
             prev_index = 0
             next_index = 1
@@ -118,7 +113,7 @@ async def button_click_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 
         updated_index = prev_index if btn_type == "prev" else next_index if btn_type == "next" else current_index
         if updated_index == current_index:
-            await query.answer()
+            await event.answer()
             return
 
         image_link = manga_results_list[updated_index]['image_url']
@@ -132,26 +127,33 @@ async def button_click_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             f"**🎆 Themes:** {manga_results_list[updated_index]['themes']}\n"
             f"**🎞️ Genres:** {manga_results_list[updated_index]['genres']}"
         )
-        buttons = InlineKeyboardMarkup([
+        
+        buttons = [
             [
-                InlineKeyboardButton("Previous", callback_data="mangaprev"),
-                InlineKeyboardButton("Next", callback_data="manganext")
+                Button.inline("Previous", b"mangaprev"),
+                Button.inline("Next", b"manganext")
             ],
             [
-                InlineKeyboardButton("Open in MAL", url=manga_results_list[updated_index]['url'])
+                Button.url("Open in MAL", manga_results_list[updated_index]['url'])
             ]
-        ])
+        ]
 
-        await query.message.edit_media(
-            media=InputMediaPhoto(media=image_link, caption=message_content)
+        # Edit the message with new content and buttons
+        await event.edit(
+            file=image_link,
+            text=message_content,
+            buttons=buttons
         )
-        await query.message.edit_reply_markup(reply_markup=buttons)
-        await query.answer()
+        await event.answer()
 
         async with aiosqlite.connect("db/database.db") as connection:
             async with connection.cursor() as cursor:
                 await cursor.execute(
                     "UPDATE manga SET current_index = ? WHERE message_id = ?",
-                    (updated_index, str(query.message.message_id))
+                    (updated_index, str(event.message_id))
                 )
                 await connection.commit()
+
+# Register the handler
+def register_callback_handlers(client):
+    client.add_event_handler(button_click_handler)

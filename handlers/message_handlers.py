@@ -1,25 +1,22 @@
-from telegram import Update
-from telegram.ext import ContextTypes
 import random
+from telethon import events
 
-
-# Message events
-async def message_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def message_event(event: events.NewMessage.Event):
     # Ensure the message and its text exist
-    if update.message is None or update.message.text is None:
+    if not event.message or not event.message.text:
         return
 
-    text = update.message.text
+    text = event.message.text
 
     # تثبيحات
     if text.startswith("ثبح ") or text == "ثبح":
-        await update.message.reply_text("ثباحو")
+        await event.reply("ثباحو")
     elif text.startswith("ثباحو ") or text == "ثباحو":
-        await update.message.reply_text("ثبح")
+        await event.reply("ثبح")
     elif text.startswith("مثائو ") or text == "مثائو":
-        await update.message.reply_text("مثا")
+        await event.reply("مثا")
     elif text.startswith("مثا ") or text == "مثا":
-        await update.message.reply_text("مثائو")
+        await event.reply("مثائو")
 
     # يالبوت
     if "يالبوت" in text:
@@ -50,43 +47,44 @@ async def message_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # me responses
         if "انا" in text:
-            if update.message.from_user and update.message.from_user.username == "Shinobi7k":
+            sender = await event.get_sender()
+            if sender and sender.username == "Shinobi7k":
                 if "ابوك" in text:
-                    await update.message.reply_text(random.choice(father))
+                    await event.reply(random.choice(father))
                     return
 
         # shinobi responses
         for word in shinobi_keywords:
             if word in text:
                 if "ابوك" in text:
-                    await update.message.reply_text(random.choice(father))
+                    await event.reply(random.choice(father))
                     return
                 if "بيعذبك" in text:
-                    await update.message.reply_text(random.choice(azab))
+                    await event.reply(random.choice(azab))
                     return
                 if "بتطبل" in text:
-                    await update.message.reply_text(random.choice(tabla))
+                    await event.reply(random.choice(tabla))
                     return
 
         # steins responses
         for word in steins_keys:
             if word in text:
-                await update.message.reply_text(random.choice(steins))
+                await event.reply(random.choice(steins))
                 return
 
         # exceptions
         if "هكسب" in text:
-            await update.message.reply_text(random.choice(win))
+            await event.reply(random.choice(win))
             return
         if "حبك" in text or "حبق" in text:
-            await update.message.reply_text(random.choice(love))
+            await event.reply(random.choice(love))
             return
         if "عامل ايه" in text or "عامل إيه" in text or "كيف حالك" in text:
-            await update.message.reply_text(random.choice(elhal))
+            await event.reply(random.choice(elhal))
             return
 
         # normal responses
         if " " in text:
-            await update.message.reply_text(random.choice(normal_responses))
+            await event.reply(random.choice(normal_responses))
         else:
-            await update.message.reply_text(random.choice(hellos))
+            await event.reply(random.choice(hellos))

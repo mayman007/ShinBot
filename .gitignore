@@ -1,6 +1,7 @@
 settings.yaml
 logging.log
 cookies.txt
+bot_session.session
 venv/
 db/
 __pycache__/
