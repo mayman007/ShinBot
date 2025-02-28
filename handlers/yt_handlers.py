@@ -7,6 +7,8 @@ from io import BytesIO
 from telethon import TelegramClient, events, Button
 from typing import Dict, List, Optional, Any, Tuple
 
+from utils.usage import save_usage
+
 # Constants
 MAX_FILESIZE = 2147483648  # 2GB max file size for Telegram
 COOKIES_FILE = 'cookies.txt'
@@ -287,6 +289,7 @@ async def download_subtitles(url: str, lang: str, safe_title: str) -> Optional[s
 @events.register(events.NewMessage(pattern=r'/yt'))
 async def yt_command(event):
     """Handle /yt command for downloading YouTube videos."""
+    await save_usage(event.get_chat(), "yt")
     message_text = event.message.message
     args = message_text.split()[1:]  # Skip the command itself
     
