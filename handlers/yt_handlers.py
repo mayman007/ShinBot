@@ -352,6 +352,7 @@ async def yt_command(event):
             event.client.user_data[f"subs_data_{event.chat_id}_{event.sender_id}"] = {
                 'video_url': video_url,
                 'safe_title': safe_title,
+                'original_msg_id': event.message.id,  # Store original message ID
             }
             
             await status_msg.edit("Choose subtitle language:", buttons=buttons)
@@ -378,6 +379,7 @@ async def yt_command(event):
             'options': video_options,
             'best_audio': best_audio,
             'message_id': status_msg.id,
+            'original_msg_id': event.message.id,  # Store original message ID
         }
         
         # Create buttons for video options
@@ -457,12 +459,12 @@ async def yt_quality_button(event):
             # Upload progress message
             await event.edit(f"Uploading video {resolution}... Please wait.")
             
-            # Send the file
+            # Send the file as reply to original message rather than status message
             await event.client.send_file(
                 entity=event.chat_id,
                 file=filename,
                 caption=f"{safe_title} [{resolution}]",
-                reply_to=yt_data.get('message_id'),
+                reply_to=yt_data.get('original_msg_id'),  # Reply to original command message
                 supports_streaming=True,
             )
             
@@ -503,6 +505,7 @@ async def yt_audio_button(event):
         data_key = f"yt_data_{event.chat_id}_{event.sender_id}"
         main_data = getattr(event.client, 'user_data', {}).get(data_key, {})
         video_url = main_data.get("video_url")
+        original_msg_id = main_data.get("original_msg_id")  # Get original message ID
         
         if not video_url:
             await event.edit("Session expired. Please use /yt command again.")
@@ -541,12 +544,12 @@ async def yt_audio_button(event):
             bio = BytesIO(file_data)
             bio.name = os.path.basename(filename)
             
-            # Send the file
+            # Send the file as reply to original message
             await event.client.send_file(
                 entity=event.chat_id,
                 file=bio,
                 caption=f"{safe_title} - {selected['abr']} kbps",
-                reply_to=main_data.get('message_id'),
+                reply_to=original_msg_id,  # Reply to original command message
             )
             
             # Clean up the file and button
@@ -582,6 +585,7 @@ async def yt_subs_callback(event):
         
         video_url = subs_data['video_url']
         safe_title = subs_data['safe_title']
+        original_msg_id = subs_data.get('original_msg_id')  # Get original message ID
         
         # Update message to show download progress
         await event.edit(f"Downloading subtitles for language: {lang}...")
@@ -609,11 +613,12 @@ async def yt_subs_callback(event):
             bio = BytesIO(file_bytes)
             bio.name = os.path.basename(filename)
             
-            # Send the file
+            # Send the file as reply to original message
             await event.client.send_file(
                 entity=event.chat_id,
                 file=bio,
                 caption=f"Subtitles ({lang}) for {safe_title}",
+                reply_to=original_msg_id,  # Reply to original command message
             )
             
             # Clean up the file and button
