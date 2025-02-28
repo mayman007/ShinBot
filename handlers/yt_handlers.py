@@ -289,7 +289,8 @@ async def download_subtitles(url: str, lang: str, safe_title: str) -> Optional[s
 @events.register(events.NewMessage(pattern=r'/yt'))
 async def yt_command(event):
     """Handle /yt command for downloading YouTube videos."""
-    await save_usage(event.get_chat(), "yt")
+    chat = await event.get_chat()
+    await save_usage(chat, "yt")
     message_text = event.message.message
     args = message_text.split()[1:]  # Skip the command itself
     
