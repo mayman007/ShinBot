@@ -22,6 +22,7 @@ def main():
     # Register command handlers
     client.add_event_handler(command_handlers.start_command, events.NewMessage(pattern=r'^/start'))
     client.add_event_handler(command_handlers.help_command, events.NewMessage(pattern=r'^/help'))
+    client.add_event_handler(command_handlers.list_join_dates, events.NewMessage(pattern=r'^/joindate'))
     client.add_event_handler(command_handlers.usagedata_command, events.NewMessage(pattern=r'^/usagedata'))
     client.add_event_handler(command_handlers.character_command, events.NewMessage(pattern=r'^/character'))
     client.add_event_handler(command_handlers.anime_command, events.NewMessage(pattern=r'^/anime'))
