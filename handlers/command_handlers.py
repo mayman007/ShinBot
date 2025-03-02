@@ -82,6 +82,7 @@ async def help_command(event):
         "/gemini - Chat with Google's Gemini Pro AI\n"
         "/help - This message\n"
         "/imagine - Generate AI images\n"
+        "/joindate - Get each member's join date in the group\n"
         "/manga - Search Manga\n"
         "/meme - Get a random meme from Reddit\n"
         "/ping - Get bot's latency\n"
