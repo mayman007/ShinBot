@@ -98,6 +98,8 @@ async def help_command(event):
 # Joindate command
 # ---------------------------
 async def list_join_dates(event):
+    chat = await event.get_chat()
+    await save_usage(chat, "joindate")
     # This command must be used in a group or supergroup.
     if not event.is_group:
         await event.reply("This command can only be used in groups.")
