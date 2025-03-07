@@ -6,7 +6,11 @@ from config import BOT_TOKEN, API_ID, API_HASH, ENABLE_GEMINI_COMMAND, ENABLE_IM
 import handlers.command_handlers as command_handlers
 import handlers.message_handlers as messages_event_handlers
 import handlers.callback_handlers as callback_handlers
-from handlers.yt_handlers import yt_audio_button, yt_command, yt_quality_button, yt_subs_callback
+import handlers.yt_handlers as yt_handlers
+from utils.timer_scheduler import check_pending_timers
+
+async def startup(client):
+    await check_pending_timers(client)
 
 def main():
     # Create necessary directories
@@ -30,7 +34,8 @@ def main():
     client.add_event_handler(command_handlers.aghpb_command, events.NewMessage(pattern=r'^/aghpb'))
     client.add_event_handler(command_handlers.echo_command, events.NewMessage(pattern=r'^/echo'))
     client.add_event_handler(command_handlers.ping_command, events.NewMessage(pattern=r'^/ping'))
-    client.add_event_handler(command_handlers.timer_command, events.NewMessage(pattern=r'^/timer'))
+    client.add_event_handler(command_handlers.timer_command, events.NewMessage(pattern=r'^/timer(\s|$)'))
+    client.add_event_handler(command_handlers.list_timers_command, events.NewMessage(pattern=r'^/timerslist'))
     client.add_event_handler(command_handlers.reverse_command, events.NewMessage(pattern=r'^/reverse'))
     client.add_event_handler(command_handlers.slot_command, events.NewMessage(pattern=r'^/slot'))
     client.add_event_handler(command_handlers.coinflip_command, events.NewMessage(pattern=r'^/coinflip'))
@@ -47,10 +52,10 @@ def main():
         client.add_event_handler(command_handlers.imagine_command, events.NewMessage(pattern=r'^/imagine'))
 
     # YouTube command handlers
-    client.add_event_handler(yt_command, events.NewMessage(pattern=r'^/yt'))
-    client.add_event_handler(yt_quality_button, events.CallbackQuery(pattern=r"^yt_\d+"))
-    client.add_event_handler(yt_audio_button, events.CallbackQuery(pattern=r'^yt_audio_\d+'))
-    client.add_event_handler(yt_subs_callback, events.CallbackQuery(pattern=r'^subs_'))
+    client.add_event_handler(yt_handlers.yt_command, events.NewMessage(pattern=r'^/yt'))
+    client.add_event_handler(yt_handlers.yt_quality_button, events.CallbackQuery(pattern=r"^yt_\d+"))
+    client.add_event_handler(yt_handlers.yt_audio_button, events.CallbackQuery(pattern=r'^yt_audio_\d+'))
+    client.add_event_handler(yt_handlers.yt_subs_callback, events.CallbackQuery(pattern=r'^subs_'))
 
     # Register a handler for text messages that are not commands
     client.add_event_handler(
@@ -62,6 +67,7 @@ def main():
     client.add_event_handler(callback_handlers.button_click_handler, events.CallbackQuery())
 
     print("Bot is running...")
+    client.loop.create_task(startup(client))
     client.run_until_disconnected()
 
 if __name__ == '__main__':

@@ -11,6 +11,7 @@ from tcp_latency import measure_latency
 from telethon import Button
 from config import BOT_USERNAME, ADMIN_ID, GEMINI_API_KEY, HUGGINGFACE_TOKEN, REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET, REDDIT_USER_AGENT
 from utils.usage import save_usage
+from utils.timer_scheduler import check_pending_timers, schedule_timer, init_timer_db
 
 # ---------------------------
 # Usagedata command
@@ -552,7 +553,6 @@ async def timer_command(event):
 
     time_units = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800, "mo": 2592000, "y": 31104000}
     
-    # Check if time_str has valid format (number + unit)
     if len(time_str) < 2 or not time_str[:-1].isdigit():
         await event.reply(
             "Type time and time unit (s, m, h, d, w, mo, y) correctly\nFor example: `/timer 30m remind me of studying`",
@@ -561,14 +561,12 @@ async def timer_command(event):
         return
     
     time_unit = time_str[-1]
-    # Special case for 'mo' (month)
     if time_str[-2:] == "mo" and len(time_str) >= 3:
         time_unit = "mo"
         input_number = time_str[:-2]
     else:
         input_number = time_str[:-1]
     
-    # Validate time unit
     time_unit_number = time_units.get(time_unit)
     if time_unit_number is None:
         await event.reply(
@@ -579,44 +577,45 @@ async def timer_command(event):
     
     try:
         sleep_duration = int(time_unit_number) * int(input_number)
+        end_time = datetime.datetime.now() + datetime.timedelta(seconds=sleep_duration)
         
-        # Set appropriate time unit word
         time_unit_words = {
             "s": "seconds", "m": "minutes", "h": "hours", 
             "d": "days", "w": "weeks", "mo": "months", "y": "years"
         }
         time_unit_word = time_unit_words.get(time_unit, time_unit)
         
-        # Make singular if input_number is 1
         if input_number == "1" and time_unit_word.endswith("s"):
             time_unit_word = time_unit_word[:-1]
         
-        # Send confirmation message
+        response_message = None
         if reason:
-            await event.reply(
+            response_message = await event.reply(
                 f"Timer set to **{input_number} {time_unit_word}**\nReason: **{reason}**",
                 parse_mode="Markdown"
             )
         else:
-            await event.reply(
+            response_message = await event.reply(
                 f"Timer set to **{input_number} {time_unit_word}**",
                 parse_mode="Markdown"
             )
-            
-        # Sleep for the specified duration
-        await asyncio.sleep(sleep_duration)
         
-        # Send timer completed message
-        if reason:
-            await event.reply(
-                f"Your timer that was set to **{input_number} {time_unit_word}** for **{reason}** has ended",
-                parse_mode="Markdown"
-            )
-        else:
-            await event.reply(
-                f"Your timer that was set to **{input_number} {time_unit_word}** has ended",
-                parse_mode="Markdown"
-            )
+        sender = await event.get_sender()
+        user_id = sender.id
+        message_id = event.id  # Get the ID of the command message
+        
+        async with aiosqlite.connect("db/database.db") as connection:
+            async with connection.cursor() as cursor:
+                await cursor.execute(
+                    "CREATE TABLE IF NOT EXISTS timers (chat_id INTEGER, user_id INTEGER, end_time TEXT, reason TEXT, state TEXT, message_id INTEGER)"
+                )
+                await cursor.execute(
+                    "INSERT INTO timers (chat_id, user_id, end_time, reason, state, message_id) VALUES (?, ?, ?, ?, 'active', ?)",
+                    (chat.id, user_id, end_time.isoformat(), reason, message_id)
+                )
+                await connection.commit()
+        delay = (end_time - datetime.datetime.now()).total_seconds()
+        asyncio.create_task(schedule_timer(event.client, chat.id, delay, reason, message_id))
     except ValueError:
         await event.reply(
             "Please enter a valid number for the timer.",
@@ -627,6 +626,102 @@ async def timer_command(event):
             f"An error occurred: {str(e)}",
             parse_mode="Markdown"
         )
+
+async def list_timers_command(event):
+    """
+    Lists all active timers for the current chat with time left until they expire.
+    """
+    chat = await event.get_chat()
+    await save_usage(chat, "timers")
+    now = datetime.datetime.now()
+    
+    async with aiosqlite.connect("db/database.db") as connection:
+        async with connection.cursor() as cursor:
+            await cursor.execute(
+                "SELECT end_time, reason, user_id, state FROM timers WHERE chat_id = ? ORDER BY end_time",
+                (chat.id,)
+            )
+            timers = await cursor.fetchall()
+    
+    if not timers:
+        await event.reply("No active timers in this chat.")
+        return
+    
+    lines = ["**📋 Active Timers:**\n"]
+    active_timers = 0
+    
+    for i, (end_time_str, reason, user_id, state) in enumerate(timers, start=1):
+        end_time = datetime.datetime.fromisoformat(end_time_str)
+        diff = end_time - now
+        
+        if diff.total_seconds() > 0 and state == 'active':
+            active_timers += 1
+            
+            # Try to get user info for a more friendly display
+            # But avoid using @ which would ping users
+            try:
+                user = await event.client.get_entity(user_id)
+                if user.username:
+                    # Use the username without @ symbol to prevent pinging
+                    user_display = f"{user.username}"
+                else:
+                    user_display = f"{user.first_name}"
+            except:
+                user_display = f"User {user_id}"
+            
+            # Format time remaining in a readable way
+            d = diff.days
+            h, remainder = divmod(diff.seconds, 3600)
+            m, s = divmod(remainder, 60)
+            
+            time_parts = []
+            if d > 0:
+                time_parts.append(f"{d}d")
+            if h > 0 or d > 0:
+                time_parts.append(f"{h}h")
+            if m > 0 or h > 0 or d > 0:
+                time_parts.append(f"{m}m")
+            time_parts.append(f"{s}s")
+            
+            time_left = " ".join(time_parts)
+            end_time_formatted = end_time.strftime("%Y-%m-%d %H:%M:%S")
+            
+            lines.append(
+                f"**{active_timers}.** ⏰ **{time_left}** remaining\n"
+                f"    📅 Ends: {end_time_formatted}\n"
+                f"    👤 Set by: {user_display}\n"
+                f"    📝 Reason: {reason or 'No reason provided'}\n"
+            )
+    
+    if active_timers == 0:
+        await event.reply("No active timers in this chat.")
+        return
+    
+    # Handle message length limit (Telegram's max is 4096)
+    full_message = "\n".join(lines)
+    if len(full_message) <= 4000:  # Using 4000 to leave some buffer
+        await event.reply(full_message)
+    else:
+        # Split message into multiple parts
+        messages = []
+        current_message = lines[0]  # Start with the header
+        
+        for i in range(1, len(lines)):
+            # If adding this line would exceed limit, start a new message
+            if len(current_message) + len(lines[i]) + 2 > 4000:
+                messages.append(current_message)
+                current_message = f"**📋 Active Timers (continued):**\n{lines[i]}"
+            else:
+                current_message += "\n\n" + lines[i]
+        
+        # Add the final message if it has content
+        if current_message:
+            messages.append(current_message)
+        
+        # Send all parts with a small delay between them
+        for msg in messages:
+            await event.reply(msg)
+            await asyncio.sleep(0.5)  # Small delay to preserve message order
 
 # ---------------------------
 # Reverse Command Handler
