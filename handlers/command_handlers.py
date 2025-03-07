@@ -90,8 +90,8 @@ async def help_command(event):
         "/reverse - Reverse your words\n"
         "/slot - A slot game\n"
         "/start - Bot's introduction\n"
-        "/timerslist - Get a list of timers set in this chat\n"
         "/timer - Set yourself a timer\n"
+        "/timerslist - Get a list of timers set in this chat\n"
         "/yt - Download videos from YouTube and other sites\n"
     )
     await event.reply(help_text)
