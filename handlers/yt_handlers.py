@@ -91,6 +91,7 @@ def format_eta(seconds):
         return f"{secs:.0f}s"
 
 class ProgressTracker:
+    """Handles progress message updates with rate limiting and intelligent updates."""
     def __init__(self, client, chat_id, message_id, description):
         self.client = client
         self.chat_id = chat_id
@@ -98,53 +99,34 @@ class ProgressTracker:
         self.description = description
         self.last_update_time = 0
         self.start_time = time.time()
-        self.last_progress = 0
-        self.last_total = 0
-        self.update_interval = 15  # Increased from 10 to 15 seconds between updates
-        self.min_progress_change = 1  # Minimum percentage change to trigger an update (changed from 20% to 1%)
-        self.min_bytes_change = 3 * 1024 * 1024  # 3MB minimum change to trigger update
-        self.tasks = []  # Track all progress update tasks
-        self.flood_wait_until = 0  # Timestamp when flood wait expires
-        self.consecutive_flood_waits = 0  # Count consecutive flood waits for backoff
-        self.max_backoff = 60  # Maximum backoff in seconds (increased from 30)
-
-    async def update_progress(self, current, total, speed=None, eta=None):
-        """Update progress message if enough time has passed."""
+        self.flood_wait_until = 0
+        self.update_interval = 10  # Seconds between regular updates
+        self.min_progress_change = 2  # Minimum percentage change to trigger update
+        
+    async def update_progress(self, current, total, speed=None, eta=None, force=False):
+        """Update progress message if conditions are met."""
         current_time = time.time()
         
-        # If we're in a flood wait period, check if it's expired
-        if self.flood_wait_until > current_time:
-            # Skip this update as we're still in flood wait
-            return
-            
-        progress_change = abs(current - self.last_progress) / (total or 1) * 100
-        bytes_change = abs(current - self.last_progress)
+        # Skip update during flood wait period
+        if current_time < self.flood_wait_until:
+            return False
         
-        # Only update if:
-        # 1. Significant time passed or
-        # 2. Significant progress change (percentage) or
-        # 3. Significant amount of bytes downloaded (3MB+) or
-        # 4. Completed or
-        # 5. First real progress update
-        if (current_time - self.last_update_time >= self.update_interval or 
-            progress_change >= self.min_progress_change or
-            bytes_change >= self.min_bytes_change or
-            (current == total and total > 0) or  
-            (current > 0 and self.last_progress == 0)):
-            
-            self.last_update_time = current_time
-            self.last_progress = current
-            self.last_total = total
-            
-            # Calculate speed if not provided
-            if speed is None and current > 0:
-                elapsed = current_time - self.start_time
-                if elapsed > 0:
-                    speed = current / elapsed
-            
-            # Format the progress message
+        # Calculate percentage for progress bar
+        percentage = 0
+        if total and total > 0:
+            percentage = min(100, (current / total) * 100)
+        
+        # Decide whether to update based on time passed or significant progress
+        time_since_update = current_time - self.last_update_time
+        should_update = force or (
+            time_since_update >= self.update_interval or 
+            (total > 0 and time_since_update >= 2 and (percentage >= 99 or percentage <= 1)) or
+            (self.last_update_time == 0)  # First update
+        )
+        
+        if should_update:
+            # Format progress message
             if total > 0:
-                percentage = current / total * 100
                 progress_bar = self._get_progress_bar(percentage)
                 speed_str = format_speed(speed) if speed else "Calculating..."
                 eta_str = format_eta(eta) if eta is not None else "Calculating..."
@@ -165,59 +147,24 @@ class ProgressTracker:
             
             try:
                 await self.client.edit_message(self.chat_id, self.message_id, msg)
-                # Reset consecutive flood waits on successful update
-                self.consecutive_flood_waits = 0
+                self.last_update_time = current_time
+                return True
             except errors.FloodWaitError as e:
-                # Handle flood wait error
-                wait_time = e.seconds
-                logger.info(f"Flood wait detected: {wait_time}s. Download continues in background.")
-                
-                # Set the flood wait expiration time
-                self.flood_wait_until = current_time + wait_time
-                
-                # Implement exponential backoff for consecutive flood waits
-                self.consecutive_flood_waits += 1
-                # Add additional backoff based on consecutive waits (max 30 seconds)
-                self.flood_wait_until += min(self.consecutive_flood_waits * 5, self.max_backoff)
+                # Handle rate limiting
+                self.flood_wait_until = current_time + e.seconds
+                logger.info(f"Progress update rate limited for {e.seconds}s")
+                return False
             except Exception as e:
                 logger.error(f"Failed to update progress: {e}")
+                return False
+        
+        return False
     
     def _get_progress_bar(self, percentage, length=20):
         """Generate a text-based progress bar."""
         filled_length = int(length * percentage / 100)
         bar = '█' * filled_length + '▒' * (length - filled_length)
         return f"[{bar}]"
-    
-    def schedule_update(self, current, total, speed=None, eta=None):
-        """Schedule a progress update from a synchronous context."""
-        # Create a task wrapper that catches exceptions
-        async def task_wrapper():
-            try:
-                await self.update_progress(current, total, speed, eta)
-            except Exception as e:
-                logger.error(f"Error in progress update task: {e}")
-        
-        # Create a new task and track it
-        task = asyncio.create_task(task_wrapper())
-        self.tasks.append(task)
-        
-        # Add a callback to remove the task when done
-        def cleanup_task(t):
-            try:
-                if t in self.tasks:
-                    self.tasks.remove(t)
-            except Exception as e:
-                logger.error(f"Error cleaning up task: {e}")
-        
-        task.add_done_callback(cleanup_task)
-    
-    async def cleanup(self):
-        """Wait for all pending tasks to complete."""
-        if self.tasks:
-            pending_tasks = [task for task in self.tasks if not task.done()]
-            if pending_tasks:
-                await asyncio.gather(*pending_tasks, return_exceptions=True)
-            self.tasks.clear()
 
 def get_best_audio(info: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """Get the best audio format from video info."""
@@ -385,283 +332,176 @@ def get_user_downloads_dir(user_id: int) -> str:
 async def download_video(url: str, video_format_id: str, best_audio: Optional[Dict[str, Any]], 
                         stream_type: str, resolution: str, client, chat_id, message_id, user_id=None) -> Tuple[str, str]:
     """Download video at specified quality with progress updates."""
-    # Always use the provided user_id parameter rather than inferring from chat_id or message_id
     if user_id is None:
-        # Fallback but this should be avoided
         user_id = chat_id if chat_id > 0 else None
-        logger.warning(f"No specific user_id provided for download. Using fallback: {user_id}")
     
     info = await extract_info(url)
     safe_title = sanitize_filename(info.get("title", "video"))
     
-    # Use user-specific directory
+    # Create user directory and set filename
     user_downloads_dir = get_user_downloads_dir(user_id)
-    os.makedirs(user_downloads_dir, exist_ok=True)
     expected_filename = os.path.join(user_downloads_dir, f"{safe_title} - {resolution}.mp4")
     
-    tracker = ProgressTracker(client, chat_id, message_id, f"Downloading video at {resolution}...")
+    # Initial progress message
+    initial_message = f"Starting download: {safe_title} [{resolution}]"
+    tracker = ProgressTracker(client, chat_id, message_id, initial_message)
     
-    # Create a shared progress state with additional fields for adaptive formats
-    progress_state = {
-        "downloaded": 0,
-        "total": 0,
-        "speed": 0,
-        "eta": None,
-        "last_update_time": 0,
-        "update_required": asyncio.Event(),
-        "finished": False,
-        "stage": "video",             # Current stage: 'video', 'audio', 'merging'
-        "video_size": 0,              # Total video size
-        "video_downloaded": 0,        # Current video downloaded
-        "audio_size": 0,              # Total audio size
-        "audio_downloaded": 0,        # Current audio downloaded
-        "current_filename": "",       # Current file being downloaded
-        "last_update_attempt": 0,     # Time of last attempt to update progress
-        "min_update_interval": 5.0,   # Increased from 2.0 seconds to 5.0 seconds
-        "min_bytes_change": 3 * 1024 * 1024,  # 3MB minimum bytes change
-        "last_bytes": 0,              # Track the last amount of bytes processed
-        "last_percent": 0,            # Last percentage completed
-        "combined_progress": True,    # Use combined progress bar for video+audio
-        "overall_percentage": 0,      # Overall download percentage (0-100)
-        "stage_changed": False,       # Flag to indicate stage change for better UI updates
-        "description_base": f"Downloading {resolution} video",  # Base description to maintain consistency
+    # Initialize progress state with simpler tracking
+    progress = {
+        "video_bytes": 0,      # Video bytes downloaded
+        "video_total": 0,      # Total video bytes
+        "audio_bytes": 0,      # Audio bytes downloaded
+        "audio_total": 0,      # Total audio bytes
+        "merged_bytes": 0,     # Post-processing bytes
+        "current_stage": "video",  # Current stage: 'video', 'audio', 'merging'
+        "speed": 0,            # Current download speed
+        "eta": None,           # Estimated time to completion
+        "last_update": 0,      # Last update time
+        "filename": "",        # Current file being downloaded
+        "event": asyncio.Event(), # Event for signaling progress updates
+        "finished": False      # Whether download is complete
     }
     
-    # Fix the initial estimation logic - don't use predefined weights
-    if stream_type == "Adaptive" and best_audio:
-        audio_size = get_size(best_audio)
-        if audio_size:
-            progress_state["audio_size"] = audio_size
-            # Don't try to estimate video size yet - we'll wait for actual data
-            # Don't set progress_state["total"] yet either
+    # Estimate total size once at the beginning
+    total_size = 0
+    video_size = 0
+    audio_size = 0
+    
+    if "adaptive" in stream_type.lower():
+        # For adaptive formats, we need to know both video and audio size
+        if best_audio:
+            audio_size = get_size(best_audio) or 0
+        
+        # Try to get video size from formats
+        formats = info.get('formats', [])
+        for fmt in formats:
+            if fmt.get('format_id') == video_format_id:
+                video_size = get_size(fmt) or 0
+                break
+        
+        total_size = video_size + audio_size
+        progress["video_total"] = video_size
+        progress["audio_total"] = audio_size
     
     # Send initial progress message
-    try:
-        await tracker.update_progress(0, 1, 0, None)
-    except Exception as e:
-        logger.error(f"Failed to send initial progress message: {e}")
-        # Continue anyway - download is more important than progress updates
+    await tracker.update_progress(0, total_size or 1, 0, None, force=True)
     
+    # Define progress hook for yt-dlp
     def progress_hook(d):
-        """Progress hook for yt-dlp."""
         if d['status'] == 'downloading':
-            current_time = time.time()
-            
-            # Identify the current stage based on filename
-            filename = d.get('info_dict', {}).get('_filename', '')
-            if filename != progress_state["current_filename"]:
-                progress_state["current_filename"] = filename
-                # If we switch to a new file and already have video data, this is audio
-                if progress_state["video_downloaded"] > 0 and stream_type == "Adaptive" and progress_state["stage"] == "video":
-                    # Mark that we've completed the video stage
-                    progress_state["previous_stage_completed"] = True
-                    progress_state["stage_changed"] = True
-                    progress_state["stage"] = "audio"
-                    # Lock in video progress for accurate calculations
-                    if progress_state["video_size"] > 0:
-                        progress_state["video_downloaded"] = progress_state["video_size"]
-            
             # Get download information
-            downloaded = d.get('downloaded_bytes', 0)
-            total = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
+            bytes_downloaded = d.get('downloaded_bytes', 0)
+            bytes_total = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
+            speed = d.get('speed', 0)
+            eta = d.get('eta')
+            filename = d.get('info_dict', {}).get('_filename', '')
             
-            # Update stage-specific progress
-            if progress_state["stage"] == "video":
-                progress_state["video_downloaded"] = downloaded
-                if total > 0:
-                    progress_state["video_size"] = total
-            elif progress_state["stage"] == "audio":
-                progress_state["audio_downloaded"] = downloaded
-                if total > 0:
-                    progress_state["audio_size"] = total
+            # Detect stage change by filename
+            if filename != progress["filename"]:
+                progress["filename"] = filename
+                
+                # If we have some video downloaded and now filename changed, we're in audio stage
+                if progress["video_bytes"] > 0 and "adaptive" in stream_type.lower():
+                    progress["current_stage"] = "audio"
+                    # Lock in video bytes for continuous progress calculation
+                    if progress["video_total"] > 0:
+                        progress["video_bytes"] = progress["video_total"]
             
-            # Enhanced combined progress calculation for adaptive formats
-            if stream_type == "Adaptive" and best_audio:
-                # Calculate total size ensuring both components are represented
-                if progress_state["video_size"] > 0 and progress_state["audio_size"] > 0:
-                    total_size = progress_state["video_size"] + progress_state["audio_size"]
-                    progress_state["total"] = total_size
-                
-                    # Calculate weights dynamically based on actual file sizes
-                    video_weight = progress_state["video_size"] / total_size
-                    audio_weight = progress_state["audio_size"] / total_size
-                
-                    # Calculate video progress percentage - ensure it's capped at 100%
-                    video_progress = min(100, (progress_state["video_downloaded"] / progress_state["video_size"]) * 100)
-                
-                    # Calculate audio progress percentage - ensure it's capped at 100%
-                    audio_progress = min(100, (progress_state["audio_downloaded"] / progress_state["audio_size"]) * 100)
-                
-                    # Calculate overall percentage based on current stage
-                    if progress_state["stage"] == "video":
-                        # Just video progress weighted
-                        progress_state["overall_percentage"] = video_progress * video_weight
-                    elif progress_state["stage"] == "audio":
-                        # Video is complete (100%) plus partial audio
-                        progress_state["overall_percentage"] = (
-                            100 * video_weight +  # Video is 100% complete
-                            audio_progress * audio_weight  # Audio is partially complete
-                        )
-                
-                    # Calculate bytes downloaded based on overall percentage for smooth progress bar
-                    progress_state["downloaded"] = int(progress_state["total"] * progress_state["overall_percentage"] / 100)
-                else:
-                    # If we don't have both sizes yet, use the direct values
-                    progress_state["downloaded"] = downloaded
-                    if progress_state["stage"] == "video":
-                        progress_state["total"] = total if total > 0 else 1
-                    elif progress_state["stage"] == "audio" and progress_state["video_size"] > 0:
-                        # For audio stage, add video size to total if we know it
-                        progress_state["total"] = progress_state["video_size"] + (total if total > 0 else 1)
-                
-            else:
-                # For progressive format, just use the direct values
-                progress_state["downloaded"] = downloaded
-                progress_state["total"] = total
-                if total > 0:
-                    progress_state["overall_percentage"] = min(100, (downloaded / total) * 100)
+            # Update appropriate stage metrics
+            if progress["current_stage"] == "video":
+                progress["video_bytes"] = bytes_downloaded
+                if bytes_total > 0 and progress["video_total"] == 0:
+                    progress["video_total"] = bytes_total
+            elif progress["current_stage"] == "audio":
+                progress["audio_bytes"] = bytes_downloaded
+                if bytes_total > 0 and progress["audio_total"] == 0:
+                    progress["audio_total"] = bytes_total
             
             # Update speed and ETA
-            progress_state["speed"] = d.get('speed')
-            progress_state["eta"] = d.get('eta')
+            progress["speed"] = speed
+            progress["eta"] = eta
             
-            # More conservative update strategy - update if:
-            # 1. At least 5.0 seconds passed since last update
-            # 2. We have significant progress (>1%) since last update
-            # 3. At least 3MB downloaded since last update
-            time_condition = current_time - progress_state["last_update_time"] >= progress_state["min_update_interval"]
-            progress_condition = False
-            bytes_condition = False
+            # Signal for progress update
+            progress["last_update"] = time.time()
+            progress["event"].set()
             
-            if progress_state["total"] > 0:
-                last_percent = progress_state.get("last_percent", 0)
-                curr_percent = (progress_state["downloaded"] / progress_state["total"]) * 100
-                progress_condition = abs(curr_percent - last_percent) >= 1  # 1% change threshold
-                progress_state["last_percent"] = curr_percent
-                
-            # Add check for minimum bytes downloaded
-            last_bytes = progress_state.get("last_bytes", 0)
-            bytes_condition = abs(progress_state["downloaded"] - last_bytes) >= progress_state["min_bytes_change"]
-            
-            # Only set update event if conditions are met or we're at key points (start/end)
-            if time_condition and (progress_condition or bytes_condition or 
-                                  progress_state["downloaded"] == 0 or 
-                                  progress_state["downloaded"] == progress_state["total"] or
-                                  progress_state["stage_changed"]):
-                progress_state["last_update_time"] = current_time
-                progress_state["last_bytes"] = progress_state["downloaded"]
-                progress_state["update_required"].set()
-        
         elif d['status'] == 'finished':
-            # Handle stage changes more gracefully
-            if progress_state["stage"] == "video" and stream_type == "Adaptive":
-                # Mark that video is complete but don't finish yet
-                progress_state["previous_stage_completed"] = True
-                progress_state["stage_changed"] = True
-                progress_state["update_required"].set()
-            elif progress_state["stage"] == "audio" or stream_type != "Adaptive":
-                progress_state["stage"] = "merging"
-                progress_state["stage_changed"] = True
-                progress_state["overall_percentage"] = 95  # Almost done, just merging
-                tracker.description = f"{progress_state['description_base']} [merging streams]"
-                progress_state["update_required"].set()
+            # If we finished downloading but we're not done yet, we're changing stages
+            if progress["current_stage"] == "video" and "adaptive" in stream_type.lower():
+                progress["current_stage"] = "audio"
+                # Lock in the video progress
+                if progress["video_total"] > 0:
+                    progress["video_bytes"] = progress["video_total"]
+            else:
+                # Both video and audio are done, now in processing stage
+                progress["current_stage"] = "merging"
+            
+            progress["event"].set()
             
         elif d['status'] == 'error':
-            progress_state["finished"] = True
-            progress_state["update_required"].set()
+            progress["finished"] = True
+            progress["event"].set()
     
-    # Task to update progress display
-    async def progress_updater():
-        last_percent = 0
-        retry_interval = 3.0  # Start with 3 second retry (increased from 1)
+    # Task to update progress UI
+    async def update_progress_ui():
+        last_update_time = 0
+        min_update_interval = 3  # Minimum seconds between updates
         
-        while not progress_state["finished"]:
+        while not progress["finished"]:
             try:
-                # Wait for event or timeout after retry_interval seconds
-                await asyncio.wait_for(progress_state["update_required"].wait(), retry_interval)
-                progress_state["update_required"].clear()
+                # Wait for event or timeout
+                try:
+                    await asyncio.wait_for(progress["event"].wait(), 5)
+                    progress["event"].clear()
+                except asyncio.TimeoutError:
+                    # No updates for 5 seconds, check if we need to send a periodic update
+                    pass
                 
-                # If we're in a rate limit backoff, check if we should increase the retry interval
-                if tracker.flood_wait_until > time.time():
-                    # Calculate remaining flood wait time
-                    remaining = tracker.flood_wait_until - time.time()
-                    if remaining > 0:
-                        # More conservative retry interval
-                        retry_interval = min(remaining * 0.75, 15.0)  # No more than 15 seconds
-                        logger.info(f"In flood wait period, adjusted retry interval to {retry_interval:.1f}s")
-                        # Skip this update but keep the download going
-                        continue
-                
-                # Use consistent description format to maintain progress bar continuity
-                if stream_type == "Adaptive" and progress_state["combined_progress"]:
-                    # Create a simpler progress description showing just the overall percentage
-                    if progress_state["stage"] == "video" or progress_state["stage"] == "audio":
-                        overall_percent = progress_state["overall_percentage"]
-                        tracker.description = f"{progress_state['description_base']} [{overall_percent:.1f}%]"
-                    elif progress_state["stage"] == "merging":
-                        tracker.description = f"{progress_state['description_base']} [finishing up]"
-                
-                # Rest of the update logic
+                # Calculate current progress based on stage
                 current_time = time.time()
-                current_percent = 0
-                if progress_state["total"] > 0:
-                    current_percent = (progress_state["downloaded"] / progress_state["total"]) * 100
-                    
-                # Only send update if there's been substantial change or it's been a while
-                should_update = (current_time - tracker.last_update_time >= tracker.update_interval or 
-                                abs(current_percent - last_percent) >= tracker.min_progress_change or
-                                progress_state["stage_changed"])
+                if current_time - last_update_time < min_update_interval:
+                    continue  # Too soon for another update
                 
-                if should_update:
-                    await tracker.update_progress(
-                        progress_state["downloaded"],
-                        progress_state["total"],
-                        progress_state["speed"],
-                        progress_state["eta"]
-                    )
-                    last_percent = current_percent
+                # Calculate overall progress based on stage
+                total_bytes = max(1, progress["video_total"] + progress["audio_total"])
+                downloaded_bytes = 0
                 
-                # Adjust retry interval based on download speed and remaining percentage
-                if progress_state["speed"] and progress_state["speed"] > 0 and progress_state["total"] > 0:
-                    percent_remaining = 100 - current_percent
-                    # For fast downloads with little remaining, update more frequently
-                    if progress_state["speed"] > 500000 and percent_remaining < 20:  # 500KB/s
-                        retry_interval = 2.0
-                    # For slow downloads or lots remaining, check less frequently
-                    elif progress_state["speed"] < 100000 or percent_remaining > 80:  # 100KB/s
-                        retry_interval = 8.0
-                    else:
-                        retry_interval = 4.0
+                if "adaptive" in stream_type.lower():
+                    # For adaptive format, combine video and audio progress
+                    if progress["current_stage"] == "video":
+                        downloaded_bytes = progress["video_bytes"]
+                        # Update description to show stage
+                        tracker.description = f"Downloading {resolution} video [Video]"
+                    elif progress["current_stage"] == "audio":
+                        # Video is complete, add audio progress
+                        downloaded_bytes = progress["video_total"] + progress["audio_bytes"]
+                        tracker.description = f"Downloading {resolution} video [Audio]"
+                    elif progress["current_stage"] == "merging":
+                        # Both downloads complete, show processing
+                        downloaded_bytes = total_bytes * 0.95  # 95% complete during processing
+                        tracker.description = f"Processing {resolution} video [Merging]"
                 else:
-                    # Default retry interval
-                    retry_interval = 5.0
-                    
-            except asyncio.TimeoutError:
-                # Only send periodic updates if significant time has passed
-                if progress_state["total"] > 0 and progress_state["downloaded"] > 0:
-                    current_time = time.time()
-                    if current_time - tracker.last_update_time >= tracker.update_interval:
-                        current_percent = (progress_state["downloaded"] / progress_state["total"]) * 100
-                        if abs(current_percent - last_percent) >= 1:  # Only update if 1% change
-                            await tracker.update_progress(
-                                progress_state["downloaded"],
-                                progress_state["total"],
-                                progress_state["speed"],
-                                progress_state["eta"]
-                            )
-                            last_percent = current_percent
-            except errors.FloodWaitError as e:
-                # More aggressive backoff for flood wait
-                logger.warning(f"Flood wait encountered during progress update: {e.seconds}s")
-                retry_interval = min(e.seconds * 1.5, 30.0)  # More aggressive backoff
+                    # For progressive format, simpler calculation
+                    downloaded_bytes = progress["video_bytes"]
+                    tracker.description = f"Downloading {resolution} video"
+                
+                # Get current speed and ETA
+                speed = progress["speed"]
+                eta = progress["eta"]
+                
+                # Update the progress UI
+                await tracker.update_progress(downloaded_bytes, total_bytes, speed, eta)
+                last_update_time = current_time
+                
             except Exception as e:
-                logger.error(f"Error updating progress: {e}")
-                retry_interval = min(retry_interval * 2.0, 20.0)  # More aggressive exponential backoff
+                logger.error(f"Error in progress UI updater: {e}")
+                await asyncio.sleep(5)  # Wait before trying again
     
-    # Start the updater task
-    updater_task = asyncio.create_task(progress_updater())
+    # Start the UI updater task
+    updater_task = asyncio.create_task(update_progress_ui())
     
-    fmt_str = f"{video_format_id}+bestaudio/best" if stream_type == "Adaptive" else video_format_id
+    # Configure yt-dlp options
+    fmt_str = f"{video_format_id}+bestaudio/best" if "adaptive" in stream_type.lower() else video_format_id
     ydl_opts = add_cookies_to_opts({
         'format': fmt_str,
         'merge_output_format': 'mp4',
@@ -670,30 +510,25 @@ async def download_video(url: str, video_format_id: str, best_audio: Optional[Di
         'max_filesize': MAX_FILESIZE,
         'postprocessor_args': ['-c:a', 'aac'],
         'progress_hooks': [progress_hook],
-        'verbose': False,  # Reduce console output
-        'socket_timeout': 30,  # Increase socket timeout
-        'retries': 10,      # Internal yt-dlp retries
-        'fragment_retries': 10,  # Fragment download retries
+        'verbose': False,
     })
     
     try:
+        # Perform the actual download
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # Use our custom retry function instead of direct call
             await download_with_retry(ydl, url)
         
-        # Update with final progress (100%)
-        if progress_state["total"] > 0:
-            progress_state["finished"] = True
-            tracker.description = f"Download complete for {resolution} video!"
-            await tracker.update_progress(
-                progress_state["total"],  # Set downloaded = total for 100%
-                progress_state["total"],
-                0,  # Speed is now 0
-                0   # ETA is now 0
-            )
+        # Mark as complete
+        progress["finished"] = True
+        progress["event"].set()
         
-        # Clean up the updater task
-        await asyncio.sleep(0.5)  # Give it time to process final update
+        # Show complete status
+        tracker.description = f"Download complete: {safe_title} [{resolution}]"
+        if os.path.exists(expected_filename):
+            file_size = os.path.getsize(expected_filename)
+            await tracker.update_progress(file_size, file_size, 0, 0, force=True)
+        
+        # Clean up updater task
         if not updater_task.done():
             updater_task.cancel()
             try:
@@ -701,32 +536,33 @@ async def download_video(url: str, video_format_id: str, best_audio: Optional[Di
             except asyncio.CancelledError:
                 pass
         
+        # Check if file exists or find it if needed
         if not os.path.exists(expected_filename):
-            # Try to find the actual file if outtmpl didn't work as expected
             pattern = os.path.join(user_downloads_dir, f"{safe_title}*.mp4")
             matches = glob.glob(pattern)
             if matches:
                 expected_filename = matches[0]
-                
-    except ValueError as e:
-        # Handle and log the specific error
-        error_msg = str(e)
-        if "ConnectionReset" in error_msg or "10054" in error_msg:
-            logger.error(f"Network connection was reset during download: {error_msg}")
-            # Update progress message with connection error info
-            try:
-                tracker.description = "Download failed due to connection reset"
-                await tracker.update_progress(0, 1, 0, 0)
-            except:
-                pass
-        # Cancel the updater task in case of error
-        progress_state["finished"] = True
+            else:
+                raise ValueError("Downloaded file not found")
+    
+    except Exception as e:
+        # Handle errors
+        progress["finished"] = True
+        progress["event"].set()
+        
+        # Cancel the updater
         if not updater_task.done():
             updater_task.cancel()
             try:
                 await updater_task
             except asyncio.CancelledError:
                 pass
+                
+        # Update UI with error
+        tracker.description = f"Download failed: {str(e)}"
+        await tracker.update_progress(0, 1, 0, 0, force=True)
+        
+        # Re-raise the error
         raise ValueError(f"Error downloading video: {str(e)}")
         
     return expected_filename, safe_title
