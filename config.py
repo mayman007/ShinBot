@@ -8,7 +8,7 @@ with open("settings.yaml", "r") as file:
     API_ID = config.get("API_ID")
     API_HASH = config.get("API_HASH")
     BOT_USERNAME = config.get("BOT_USERNAME")
-    ADMIN_ID = config.get("ADMIN_ID")
+    ADMIN_IDS = config.get("ADMIN_IDS")
     GEMINI_API_KEY = config.get("GEMINI_API_KEY")
     HUGGINGFACE_TOKEN = config.get("HUGGINGFACE_TOKEN")
     REDDIT_CLIENT_ID = config.get("REDDIT_CLIENT_ID")

@@ -3,7 +3,7 @@ BOT_TOKEN: "YOUR_BOT_TOKEN" # Bot token
 API_ID: YOUR_API_ID # API ID
 API_HASH: "YOU_API_HASH" # API Hash
 BOT_USERNAME: "YOUR_BOT_USERNAME" # Bot username (without the "@")
-ADMIN_ID: "YOUR_ADMIN_ID" # Telegram user ID for bot administrator
+ADMIN_IDS: [YOUR_ADMIN_IDs] # Telegram user IDs for bot administrator
 
 # Optional settings
 DEBUG: false

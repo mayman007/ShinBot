@@ -9,17 +9,16 @@ import praw
 import google.generativeai as genai
 from tcp_latency import measure_latency
 from telethon import Button
-from config import BOT_USERNAME, ADMIN_ID, GEMINI_API_KEY, HUGGINGFACE_TOKEN, REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET, REDDIT_USER_AGENT
+from config import BOT_USERNAME, ADMIN_IDS, GEMINI_API_KEY, HUGGINGFACE_TOKEN, REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET, REDDIT_USER_AGENT
 from utils.usage import save_usage
-from utils.timer_scheduler import check_pending_timers, get_chat_timer_table, schedule_timer, init_timer_db
-from utils.timer_scheduler import cancel_timer  # Add this import
+from utils.timer_scheduler import get_chat_timer_table, schedule_timer, cancel_timer
 
 # ---------------------------
 # Usagedata command
 # ---------------------------
 async def usagedata_command(event):
     # Check if sender is admin
-    if event.sender_id == int(ADMIN_ID):
+    if event.sender_id in ADMIN_IDS:
         data_message = "Here is all the usage data!\n"
         async with aiosqlite.connect("db/usage.db") as connection:
             async with connection.cursor() as cursor:
