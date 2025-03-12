@@ -10,7 +10,7 @@ import socket
 import http.client
 from io import BytesIO
 from telethon import TelegramClient, events, Button, errors
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any, Tuple, Set
 
 from utils.usage import save_usage
 
@@ -20,10 +20,14 @@ logger = logging.getLogger(__name__)
 # Constants
 MAX_FILESIZE = 2147483648  # 2GB max file size for Telegram
 COOKIES_FILE = 'cookies.txt'
-DOWNLOADS_DIR = 'downloads'
+DOWNLOADS_DIR = 'downloads'  # Base downloads directory
 MAX_RETRIES = 3  # Maximum number of retry attempts
 INITIAL_RETRY_DELAY = 2  # Initial delay between retries in seconds
 MAX_RETRY_DELAY = 10  # Maximum delay between retries in seconds
+
+# Track active downloads per user (make it a proper singleton with global scope)
+active_downloads: Dict[int, str] = {}
+download_locks = {}  # Add locks per user to prevent race conditions
 
 # Ensure downloads directory exists
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
@@ -372,19 +376,28 @@ async def download_with_retry(ydl, url, retries=MAX_RETRIES, initial_delay=INITI
             # For other errors, don't retry
             raise ValueError(f"Unexpected error during download: {str(e)}")
 
+def get_user_downloads_dir(user_id: int) -> str:
+    """Create and return a user-specific download directory."""
+    user_dir = os.path.join(DOWNLOADS_DIR, str(user_id))
+    os.makedirs(user_dir, exist_ok=True)
+    return user_dir
+
 async def download_video(url: str, video_format_id: str, best_audio: Optional[Dict[str, Any]], 
-                        stream_type: str, resolution: str, client, chat_id, message_id) -> Tuple[str, str]:
+                        stream_type: str, resolution: str, client, chat_id, message_id, user_id=None) -> Tuple[str, str]:
     """Download video at specified quality with progress updates."""
+    # Always use the provided user_id parameter rather than inferring from chat_id or message_id
+    if user_id is None:
+        # Fallback but this should be avoided
+        user_id = chat_id if chat_id > 0 else None
+        logger.warning(f"No specific user_id provided for download. Using fallback: {user_id}")
+    
     info = await extract_info(url)
     safe_title = sanitize_filename(info.get("title", "video"))
     
-    os.makedirs(DOWNLOADS_DIR, exist_ok=True)
-    expected_filename = os.path.join(DOWNLOADS_DIR, f"{safe_title} - {resolution}.mp4")
-    
-    if stream_type == "Adaptive" and best_audio:
-        fmt_str = f"{video_format_id}+{best_audio.get('format_id')}"
-    else:
-        fmt_str = video_format_id
+    # Use user-specific directory
+    user_downloads_dir = get_user_downloads_dir(user_id)
+    os.makedirs(user_downloads_dir, exist_ok=True)
+    expected_filename = os.path.join(user_downloads_dir, f"{safe_title} - {resolution}.mp4")
     
     tracker = ProgressTracker(client, chat_id, message_id, f"Downloading video at {resolution}...")
     
@@ -409,7 +422,18 @@ async def download_video(url: str, video_format_id: str, best_audio: Optional[Di
         "last_bytes": 0,              # Track the last amount of bytes processed
         "last_percent": 0,            # Last percentage completed
         "combined_progress": True,    # Use combined progress bar for video+audio
+        "overall_percentage": 0,      # Overall download percentage (0-100)
+        "stage_changed": False,       # Flag to indicate stage change for better UI updates
+        "description_base": f"Downloading {resolution} video",  # Base description to maintain consistency
     }
+    
+    # Fix the initial estimation logic - don't use predefined weights
+    if stream_type == "Adaptive" and best_audio:
+        audio_size = get_size(best_audio)
+        if audio_size:
+            progress_state["audio_size"] = audio_size
+            # Don't try to estimate video size yet - we'll wait for actual data
+            # Don't set progress_state["total"] yet either
     
     # Send initial progress message
     try:
@@ -428,10 +452,14 @@ async def download_video(url: str, video_format_id: str, best_audio: Optional[Di
             if filename != progress_state["current_filename"]:
                 progress_state["current_filename"] = filename
                 # If we switch to a new file and already have video data, this is audio
-                if progress_state["video_downloaded"] > 0 and stream_type == "Adaptive":
+                if progress_state["video_downloaded"] > 0 and stream_type == "Adaptive" and progress_state["stage"] == "video":
+                    # Mark that we've completed the video stage
+                    progress_state["previous_stage_completed"] = True
+                    progress_state["stage_changed"] = True
                     progress_state["stage"] = "audio"
-                    # Don't change the main description, just add info about current stage
-                    tracker.description = f"Downloading {resolution} video... (audio stream)"
+                    # Lock in video progress for accurate calculations
+                    if progress_state["video_size"] > 0:
+                        progress_state["video_downloaded"] = progress_state["video_size"]
             
             # Get download information
             downloaded = d.get('downloaded_bytes', 0)
@@ -440,27 +468,60 @@ async def download_video(url: str, video_format_id: str, best_audio: Optional[Di
             # Update stage-specific progress
             if progress_state["stage"] == "video":
                 progress_state["video_downloaded"] = downloaded
-                progress_state["video_size"] = total if total > 0 else progress_state["video_size"]
+                if total > 0:
+                    progress_state["video_size"] = total
             elif progress_state["stage"] == "audio":
                 progress_state["audio_downloaded"] = downloaded
-                progress_state["audio_size"] = total if total > 0 else progress_state["audio_size"]
+                if total > 0:
+                    progress_state["audio_size"] = total
             
-            # Calculate overall progress - combined method
+            # Enhanced combined progress calculation for adaptive formats
             if stream_type == "Adaptive" and best_audio:
-                # Combined progress: Video and audio progress as portions of the whole
-                progress_state["total"] = progress_state["video_size"] + progress_state["audio_size"]
+                # Calculate total size ensuring both components are represented
+                if progress_state["video_size"] > 0 and progress_state["audio_size"] > 0:
+                    total_size = progress_state["video_size"] + progress_state["audio_size"]
+                    progress_state["total"] = total_size
                 
-                if progress_state["stage"] == "video":
-                    # During video stage, show just video progress
-                    progress_state["downloaded"] = progress_state["video_downloaded"]
-                elif progress_state["stage"] == "audio":
-                    # During audio stage, show video progress + audio progress
-                    progress_state["downloaded"] = progress_state["video_size"] + progress_state["audio_downloaded"]
+                    # Calculate weights dynamically based on actual file sizes
+                    video_weight = progress_state["video_size"] / total_size
+                    audio_weight = progress_state["audio_size"] / total_size
+                
+                    # Calculate video progress percentage - ensure it's capped at 100%
+                    video_progress = min(100, (progress_state["video_downloaded"] / progress_state["video_size"]) * 100)
+                
+                    # Calculate audio progress percentage - ensure it's capped at 100%
+                    audio_progress = min(100, (progress_state["audio_downloaded"] / progress_state["audio_size"]) * 100)
+                
+                    # Calculate overall percentage based on current stage
+                    if progress_state["stage"] == "video":
+                        # Just video progress weighted
+                        progress_state["overall_percentage"] = video_progress * video_weight
+                    elif progress_state["stage"] == "audio":
+                        # Video is complete (100%) plus partial audio
+                        progress_state["overall_percentage"] = (
+                            100 * video_weight +  # Video is 100% complete
+                            audio_progress * audio_weight  # Audio is partially complete
+                        )
+                
+                    # Calculate bytes downloaded based on overall percentage for smooth progress bar
+                    progress_state["downloaded"] = int(progress_state["total"] * progress_state["overall_percentage"] / 100)
+                else:
+                    # If we don't have both sizes yet, use the direct values
+                    progress_state["downloaded"] = downloaded
+                    if progress_state["stage"] == "video":
+                        progress_state["total"] = total if total > 0 else 1
+                    elif progress_state["stage"] == "audio" and progress_state["video_size"] > 0:
+                        # For audio stage, add video size to total if we know it
+                        progress_state["total"] = progress_state["video_size"] + (total if total > 0 else 1)
+                
             else:
                 # For progressive format, just use the direct values
                 progress_state["downloaded"] = downloaded
                 progress_state["total"] = total
-                
+                if total > 0:
+                    progress_state["overall_percentage"] = min(100, (downloaded / total) * 100)
+            
+            # Update speed and ETA
             progress_state["speed"] = d.get('speed')
             progress_state["eta"] = d.get('eta')
             
@@ -485,18 +546,25 @@ async def download_video(url: str, video_format_id: str, best_audio: Optional[Di
             # Only set update event if conditions are met or we're at key points (start/end)
             if time_condition and (progress_condition or bytes_condition or 
                                   progress_state["downloaded"] == 0 or 
-                                  progress_state["downloaded"] == progress_state["total"]):
+                                  progress_state["downloaded"] == progress_state["total"] or
+                                  progress_state["stage_changed"]):
                 progress_state["last_update_time"] = current_time
                 progress_state["last_bytes"] = progress_state["downloaded"]
                 progress_state["update_required"].set()
         
         elif d['status'] == 'finished':
-            # Only mark as fully finished if not in adaptive format or if we're in audio stage
-            if stream_type != "Adaptive" or progress_state["stage"] == "audio":
-                if progress_state["stage"] != "merging":
-                    progress_state["stage"] = "merging"
-                    tracker.description = "Processing and merging files..."
-                    progress_state["update_required"].set()
+            # Handle stage changes more gracefully
+            if progress_state["stage"] == "video" and stream_type == "Adaptive":
+                # Mark that video is complete but don't finish yet
+                progress_state["previous_stage_completed"] = True
+                progress_state["stage_changed"] = True
+                progress_state["update_required"].set()
+            elif progress_state["stage"] == "audio" or stream_type != "Adaptive":
+                progress_state["stage"] = "merging"
+                progress_state["stage_changed"] = True
+                progress_state["overall_percentage"] = 95  # Almost done, just merging
+                tracker.description = f"{progress_state['description_base']} [merging streams]"
+                progress_state["update_required"].set()
             
         elif d['status'] == 'error':
             progress_state["finished"] = True
@@ -524,26 +592,14 @@ async def download_video(url: str, video_format_id: str, best_audio: Optional[Di
                         # Skip this update but keep the download going
                         continue
                 
-                # Update progress description with stage info for better user experience
+                # Use consistent description format to maintain progress bar continuity
                 if stream_type == "Adaptive" and progress_state["combined_progress"]:
-                    # Add more detailed percentage info in the description
-                    if progress_state["stage"] == "video":
-                        video_percent = 0
-                        if progress_state["video_size"] > 0:
-                            video_percent = (progress_state["video_downloaded"] / progress_state["video_size"]) * 100
-                        
-                        tracker.description = f"Downloading {resolution} video... ({video_percent:.1f}% of video)"
-                    
-                    elif progress_state["stage"] == "audio":
-                        audio_percent = 0
-                        if progress_state["audio_size"] > 0:
-                            audio_percent = (progress_state["audio_downloaded"] / progress_state["audio_size"]) * 100
-                        
-                        # Show combined info in description
-                        tracker.description = f"Downloading {resolution} video... (video done, audio {audio_percent:.1f}%)"
-                    
+                    # Create a simpler progress description showing just the overall percentage
+                    if progress_state["stage"] == "video" or progress_state["stage"] == "audio":
+                        overall_percent = progress_state["overall_percentage"]
+                        tracker.description = f"{progress_state['description_base']} [{overall_percent:.1f}%]"
                     elif progress_state["stage"] == "merging":
-                        tracker.description = f"Processing {resolution} video... (merging streams)"
+                        tracker.description = f"{progress_state['description_base']} [finishing up]"
                 
                 # Rest of the update logic
                 current_time = time.time()
@@ -553,7 +609,8 @@ async def download_video(url: str, video_format_id: str, best_audio: Optional[Di
                     
                 # Only send update if there's been substantial change or it's been a while
                 should_update = (current_time - tracker.last_update_time >= tracker.update_interval or 
-                                abs(current_percent - last_percent) >= tracker.min_progress_change)
+                                abs(current_percent - last_percent) >= tracker.min_progress_change or
+                                progress_state["stage_changed"])
                 
                 if should_update:
                     await tracker.update_progress(
@@ -604,6 +661,7 @@ async def download_video(url: str, video_format_id: str, best_audio: Optional[Di
     # Start the updater task
     updater_task = asyncio.create_task(progress_updater())
     
+    fmt_str = f"{video_format_id}+bestaudio/best" if stream_type == "Adaptive" else video_format_id
     ydl_opts = add_cookies_to_opts({
         'format': fmt_str,
         'merge_output_format': 'mp4',
@@ -645,7 +703,7 @@ async def download_video(url: str, video_format_id: str, best_audio: Optional[Di
         
         if not os.path.exists(expected_filename):
             # Try to find the actual file if outtmpl didn't work as expected
-            pattern = os.path.join(DOWNLOADS_DIR, f"{safe_title}*.mp4")
+            pattern = os.path.join(user_downloads_dir, f"{safe_title}*.mp4")
             matches = glob.glob(pattern)
             if matches:
                 expected_filename = matches[0]
@@ -673,14 +731,21 @@ async def download_video(url: str, video_format_id: str, best_audio: Optional[Di
         
     return expected_filename, safe_title
 
-async def download_audio_by_format(url: str, audio_format_id: str, quality_str: str, client, chat_id, message_id) -> Tuple[str, str]:
+async def download_audio_by_format(url: str, audio_format_id: str, quality_str: str, client, chat_id, message_id, user_id=None) -> Tuple[str, str]:
     """Download audio at specified quality with progress updates."""
+    # Always use the provided user_id parameter rather than inferring from chat_id or message_id
+    if user_id is None:
+        # Fallback but this should be avoided
+        user_id = chat_id if chat_id > 0 else None
+        logger.warning(f"No specific user_id provided for audio download. Using fallback: {user_id}")
+    
     info = await extract_info(url)
     safe_title = sanitize_filename(info.get("title", "audio"))
     
-    os.makedirs(DOWNLOADS_DIR, exist_ok=True)
-    expected_template = os.path.join(DOWNLOADS_DIR, f"{safe_title}.{quality_str}.%(ext)s")
-    expected_filename = os.path.join(DOWNLOADS_DIR, f"{safe_title}.{quality_str}.mp3")
+    # Use user-specific directory
+    user_downloads_dir = get_user_downloads_dir(user_id)
+    expected_template = os.path.join(user_downloads_dir, f"{safe_title}.{quality_str}.%(ext)s")
+    expected_filename = os.path.join(user_downloads_dir, f"{safe_title}.{quality_str}.mp3")
     
     tracker = ProgressTracker(client, chat_id, message_id, f"Downloading audio at {quality_str}...")
     
@@ -868,7 +933,7 @@ async def download_audio_by_format(url: str, audio_format_id: str, quality_str: 
                 
         if not os.path.exists(expected_filename):
             # Try to find the actual file if outtmpl didn't work as expected
-            pattern = os.path.join(DOWNLOADS_DIR, f"{safe_title}*.mp3")
+            pattern = os.path.join(user_downloads_dir, f"{safe_title}*.mp3")
             matches = glob.glob(pattern)
             if matches:
                 expected_filename = matches[0]
@@ -895,10 +960,11 @@ async def download_audio_by_format(url: str, audio_format_id: str, quality_str: 
         
     return expected_filename, safe_title
 
-async def download_subtitles(url: str, lang: str, safe_title: str) -> Optional[str]:
+async def download_subtitles(url: str, lang: str, safe_title: str, user_id: int) -> Optional[str]:
     """Download subtitles in specified language."""
-    os.makedirs(DOWNLOADS_DIR, exist_ok=True)
-    outtmpl = os.path.join(DOWNLOADS_DIR, safe_title)
+    # Use user-specific directory
+    user_downloads_dir = get_user_downloads_dir(user_id)
+    outtmpl = os.path.join(user_downloads_dir, safe_title)
     
     # Handle language formatting
     sub_lang = lang
@@ -925,12 +991,12 @@ async def download_subtitles(url: str, lang: str, safe_title: str) -> Optional[s
         return None
     
     # Try different patterns to find the subtitle file
-    pattern = os.path.join(DOWNLOADS_DIR, f"{safe_title}.{sub_lang}.*")
+    pattern = os.path.join(user_downloads_dir, f"{safe_title}.{sub_lang}.*")
     matches = glob.glob(pattern)
     
     if not matches:
         # Try alternative pattern
-        pattern = os.path.join(DOWNLOADS_DIR, f"{safe_title}.*.{sub_lang}.*")
+        pattern = os.path.join(user_downloads_dir, f"{safe_title}.*.{sub_lang}.*")
         matches = glob.glob(pattern)
         
     if matches:
@@ -993,6 +1059,15 @@ async def yt_command(event):
     """Handle /yt command for downloading YouTube videos."""
     chat = await event.get_chat()
     await save_usage(chat, "yt")
+    
+    # Get the user ID of the sender
+    user_id = event.sender_id
+    
+    # Check if the user already has an active download
+    if user_id in active_downloads:
+        await event.reply(f"⚠️ You already have an active download in progress:\n\n{active_downloads[user_id]}\n\nPlease wait for it to complete before starting a new one.")
+        return
+        
     message_text = event.message.message
     args = message_text.split()[1:]  # Skip the command itself
     
@@ -1125,82 +1200,107 @@ async def yt_quality_button(event):
     try:
         await event.answer()  # Acknowledge callback
         
-        # Extract index from callback data
+        # Extract index from callback data and get user ID
         index = int(event.data.decode().split("_")[1])
+        user_id = event.sender_id  # Get the actual user ID of the sender
         
-        # Get user data
-        user_data_key = f"yt_data_{event.chat_id}_{event.sender_id}"
-        yt_data = getattr(event.client, 'user_data', {}).get(user_data_key)
+        # Get or create a lock for this user
+        if user_id not in download_locks:
+            download_locks[user_id] = asyncio.Lock()
         
-        if not yt_data:
-            await event.edit("Session expired. Please use /yt command again.")
-            return
-        
-        video_url = yt_data['video_url']
-        options = yt_data['options']
-        best_audio = yt_data['best_audio']
-        
-        if index < 0 or index >= len(options):
-            await event.edit("Invalid selection.")
-            return
-        
-        selected = options[index]
-        resolution = selected['resolution']
-        video_format_id = selected['format'].get('format_id')
-        stream_type = selected['stream_type']
-        
-        # Update message to show initial download state
-        await event.edit(f"Starting download at {resolution}... Please wait.")
-        
-        try:
-            # Download the video with progress updates
-            filename, safe_title = await download_video(
-                video_url, 
-                video_format_id, 
-                best_audio, 
-                stream_type, 
-                resolution,
-                event.client,
-                event.chat_id,
-                event.message_id
-            )
-            
-            # Check file size before sending
-            if os.path.exists(filename):  # Add existence check
-                file_size = os.path.getsize(filename)
-                if file_size > MAX_FILESIZE:
-                    await event.edit(f"Error: File size ({file_size/(1024*1024):.1f} MB) exceeds Telegram's limit of 2 GB.")
-                    safe_delete(filename)
-                    return
-            else:
-                await event.edit("Error: Downloaded file not found.")
+        # Try to acquire the lock - this prevents race conditions
+        async with download_locks[user_id]:
+            # Check if user already has an active download
+            if user_id in active_downloads:
+                await event.edit(f"⚠️ You already have an active download in progress:\n\n{active_downloads[user_id]}\n\nPlease wait for it to complete.")
                 return
             
-            # Upload the file with progress tracking
-            await upload_file_with_progress(
-                event.client,
-                event.chat_id,
-                event.message_id,
-                filename,
-                f"{safe_title} [{resolution}]",
-                yt_data.get('original_msg_id')
-            )
+            # Get user data
+            user_data_key = f"yt_data_{event.chat_id}_{event.sender_id}"
+            yt_data = getattr(event.client, 'user_data', {}).get(user_data_key)
             
-            # Clean up the file and button
-            safe_delete(filename)
-            await event.delete()
+            if not yt_data:
+                await event.edit("Session expired. Please use /yt command again.")
+                return
             
-        except Exception as e:
-            await event.edit(f"Error: {str(e)}")
-            # Clean up any partially downloaded files
+            video_url = yt_data['video_url']
+            options = yt_data['options']
+            best_audio = yt_data['best_audio']
+            
+            if index < 0 or index >= len(options):
+                await event.edit("Invalid selection.")
+                return
+            
+            selected = options[index]
+            resolution = selected['resolution']
+            video_format_id = selected['format'].get('format_id')
+            stream_type = selected['stream_type']
+            
+            # Mark this user as having an active download
+            info = await extract_info(video_url)
+            video_title = info.get('title', 'Unknown video')
+            active_downloads[user_id] = f"{video_title} [{resolution}]"
+            
+            # Update message to show initial download state
+            await event.edit(f"Starting download at {resolution}... Please wait.")
+            
             try:
-                pattern = os.path.join(DOWNLOADS_DIR, f"*{resolution}*")
-                for file_path in glob.glob(pattern):
-                    safe_delete(file_path)
-            except Exception as cleanup_error:
-                print(f"Error during cleanup: {cleanup_error}")
+                # Download the video with progress updates and pass the user_id
+                filename, safe_title = await download_video(
+                    video_url, 
+                    video_format_id, 
+                    best_audio, 
+                    stream_type, 
+                    resolution,
+                    event.client,
+                    event.chat_id,
+                    event.message_id,
+                    user_id  # Pass the real user ID
+                )
+                
+                # Check file size before sending
+                if os.path.exists(filename):  # Add existence check
+                    file_size = os.path.getsize(filename)
+                    if file_size > MAX_FILESIZE:
+                        await event.edit(f"Error: File size ({file_size/(1024*1024):.1f} MB) exceeds Telegram's limit of 2 GB.")
+                        safe_delete(filename)
+                        return
+                else:
+                    await event.edit("Error: Downloaded file not found.")
+                    return
+                
+                # Upload the file with progress tracking
+                await upload_file_with_progress(
+                    event.client,
+                    event.chat_id,
+                    event.message_id,
+                    filename,
+                    f"{safe_title} [{resolution}]",
+                    yt_data.get('original_msg_id')
+                )
+                
+                # Clean up the file and button
+                safe_delete(filename)
+                await event.delete()
+                
+            except Exception as e:
+                await event.edit(f"Error: {str(e)}")
+                # Clean up any partially downloaded files
+                try:
+                    pattern = os.path.join(DOWNLOADS_DIR, f"*{resolution}*")
+                    for file_path in glob.glob(pattern):
+                        safe_delete(file_path)
+                except Exception as cleanup_error:
+                    print(f"Error during cleanup: {cleanup_error}")
+            finally:
+                # Always remove the user from active downloads when done
+                if user_id in active_downloads:
+                    del active_downloads[user_id]
             
     except Exception as e:
+        # Make sure to remove from active downloads even if there's an error
+        if 'user_id' in locals() and user_id in active_downloads:
+            del active_downloads[user_id]
         await event.edit(f"An unexpected error occurred: {str(e)}")
 
 @events.register(events.CallbackQuery(pattern=r'yt_audio_\d+$'))
@@ -1209,80 +1309,105 @@ async def yt_audio_button(event):
     try:
         await event.answer()  # Acknowledge callback
         
-        # Extract index from callback data
+        # Extract index from callback data and get user ID
         index = int(event.data.decode().split("_")[2])
+        user_id = event.sender_id
         
-        # Get audio options from user data
-        audio_key = f"yt_audio_{event.chat_id}_{event.sender_id}"
-        audio_options = getattr(event.client, 'user_data', {}).get(audio_key)
+        # Get or create a lock for this user
+        if user_id not in download_locks:
+            download_locks[user_id] = asyncio.Lock()
         
-        if not audio_options or index < 0 or index >= len(audio_options):
-            await event.edit("Session expired or invalid selection. Please use /yt command again.")
-            return
-        
-        selected = audio_options[index]
-        
-        # Get the video URL from the main data
-        data_key = f"yt_data_{event.chat_id}_{event.sender_id}"
-        main_data = getattr(event.client, 'user_data', {}).get(data_key, {})
-        video_url = main_data.get("video_url")
-        original_msg_id = main_data.get("original_msg_id")  # Get original message ID
-        
-        if not video_url:
-            await event.edit("Session expired. Please use /yt command again.")
-            return
-        
-        audio_format_id = selected["format"].get("format_id")
-        quality_str = f"{selected['abr']}kbps"
-        
-        # Update message to show initial download state
-        await event.edit(f"Starting download at {selected['abr']} kbps...")
-        
-        try:
-            # Download the audio with progress updates
-            filename, safe_title = await download_audio_by_format(
-                video_url, 
-                audio_format_id, 
-                quality_str, 
-                event.client, 
-                event.chat_id, 
-                event.message_id
-            )
-            
-            # Check if file exists
-            if not os.path.exists(filename):
-                await event.edit("Error: Downloaded file not found.")
+        # Try to acquire the lock - this prevents race conditions
+        async with download_locks[user_id]:
+            # Check if user already has an active download
+            if user_id in active_downloads:
+                await event.edit(f"⚠️ You already have an active download in progress:\n\n{active_downloads[user_id]}\n\nPlease wait for it to complete.")
                 return
+            
+            # Get audio options from user data
+            audio_key = f"yt_audio_{event.chat_id}_{event.sender_id}"
+            audio_options = getattr(event.client, 'user_data', {}).get(audio_key)
+            
+            if not audio_options or index < 0 or index >= len(audio_options):
+                await event.edit("Session expired or invalid selection. Please use /yt command again.")
+                return
+            
+            selected = audio_options[index]
+            
+            # Get the video URL from the main data
+            data_key = f"yt_data_{event.chat_id}_{event.sender_id}"
+            main_data = getattr(event.client, 'user_data', {}).get(data_key, {})
+            video_url = main_data.get("video_url")
+            original_msg_id = main_data.get("original_msg_id")  # Get original message ID
+            
+            if not video_url:
+                await event.edit("Session expired. Please use /yt command again.")
+                return
+            
+            # Mark this user as having an active download
+            info = await extract_info(video_url)
+            audio_title = info.get('title', 'Unknown audio')
+            active_downloads[user_id] = f"{audio_title} - {selected['abr']} kbps (audio)"
+            
+            audio_format_id = selected["format"].get("format_id")
+            quality_str = f"{selected['abr']}kbps"
+            
+            # Update message to show initial download state
+            await event.edit(f"Starting download at {selected['abr']} kbps...")
+            
+            try:
+                # Download the audio with progress updates and pass the user_id
+                filename, safe_title = await download_audio_by_format(
+                    video_url, 
+                    audio_format_id, 
+                    quality_str, 
+                    event.client, 
+                    event.chat_id, 
+                    event.message_id,
+                    user_id  # Pass the real user ID
+                )
                 
-            # Check file size
-            file_size = os.path.getsize(filename)
-            if file_size > MAX_FILESIZE:
-                await event.edit(f"Error: File size ({file_size/(1024*1024):.1f} MB) exceeds Telegram's limit.")
+                # Check if file exists
+                if not os.path.exists(filename):
+                    await event.edit("Error: Downloaded file not found.")
+                    return
+                    
+                # Check file size
+                file_size = os.path.getsize(filename)
+                if file_size > MAX_FILESIZE:
+                    await event.edit(f"Error: File size ({file_size/(1024*1024):.1f} MB) exceeds Telegram's limit.")
+                    safe_delete(filename)
+                    return
+                    
+                # Upload the file with progress tracking
+                await upload_file_with_progress(
+                    event.client,
+                    event.chat_id,
+                    event.message_id,
+                    filename,
+                    f"{safe_title} - {selected['abr']} kbps",
+                    original_msg_id
+                )
+                
+                # Clean up the file and button
                 safe_delete(filename)
-                return
+                await event.delete()
                 
-            # Upload the file with progress tracking
-            await upload_file_with_progress(
-                event.client,
-                event.chat_id,
-                event.message_id,
-                filename,
-                f"{safe_title} - {selected['abr']} kbps",
-                original_msg_id
-            )
-            
-            # Clean up the file and button
-            safe_delete(filename)
-            await event.delete()
-            
-        except Exception as e:
-            await event.edit(f"Error: {str(e)}")
-            # Clean up any partially downloaded files
-            pattern = os.path.join(DOWNLOADS_DIR, f"*{quality_str}*")
-            for file in glob.glob(pattern):
-                safe_delete(file)
+            except Exception as e:
+                await event.edit(f"Error: {str(e)}")
+                # Clean up any partially downloaded files
+                pattern = os.path.join(DOWNLOADS_DIR, f"*{quality_str}*")
+                for file in glob.glob(pattern):
+                    safe_delete(file)
+            finally:
+                # Always remove the user from active downloads when done
+                if user_id in active_downloads:
+                    del active_downloads[user_id]
             
     except Exception as e:
+        # Make sure to remove from active downloads even if there's an error
+        if 'user_id' in locals() and user_id in active_downloads:
+            del active_downloads[user_id]
         await event.edit(f"An unexpected error occurred: {str(e)}")
 
 @events.register(events.CallbackQuery(pattern=r'subs_'))
@@ -1294,6 +1419,13 @@ async def yt_subs_callback(event):
         # Extract language from callback data
         lang = event.data.decode().split("_", 1)[1]
         
+        # Get user ID from the event
+        user_id = event.sender_id
+        
+        # Check if user already has an active download
+        # Note: We allow subtitle downloads even if a video download is happening
+        # since they are relatively small and quick
+        
         # Get subtitle data from user data
         subs_key = f"subs_data_{event.chat_id}_{event.sender_id}"
         subs_data = getattr(event.client, 'user_data', {}).get(subs_key)
@@ -1304,14 +1436,17 @@ async def yt_subs_callback(event):
         
         video_url = subs_data['video_url']
         safe_title = subs_data['safe_title']
-        original_msg_id = subs_data.get('original_msg_id')  # Get original message ID
+        original_msg_id = subs_data.get('original_msg_id')
         
         # Update message to show download progress
         await event.edit(f"Downloading subtitles for language: {lang}...")
         
         try:
-            # Download subtitles
-            filename = await download_subtitles(video_url, lang, safe_title)
+            # Get user ID from the event
+            user_id = event.sender_id
+            
+            # Download subtitles with user ID
+            filename = await download_subtitles(video_url, lang, safe_title, user_id)
             
             if not filename or not os.path.exists(filename):
                 await event.edit(f"Error: Subtitles for {lang} not available or could not be downloaded.")
@@ -1355,6 +1490,50 @@ async def ignore_callback(event):
     """Handle ignore callback for header buttons."""
     await event.answer("This is just a header, not a button.")
 
+# Update main function to cleanup old downloads regularly
+@events.register(events.NewMessage(pattern=r'/cleanup_downloads'))
+async def cleanup_downloads(event):
+    """Admin command to clean up old downloads."""
+    # Only allow admins or the bot owner to use this command
+    if not await is_admin_or_owner(event.client, event.sender_id):
+        await event.reply("You don't have permission to use this command.")
+        return
+
+    try:
+        # Delete files older than 24 hours
+        cutoff_time = time.time() - 86400  # 24 hours
+        deleted_count = 0
+        
+        for user_dir in os.listdir(DOWNLOADS_DIR):
+            user_path = os.path.join(DOWNLOADS_DIR, user_dir)
+            if not os.path.isdir(user_path):
+                continue
+                
+            for file in os.listdir(user_path):
+                file_path = os.path.join(user_path, file)
+                if os.path.isfile(file_path):
+                    file_time = os.path.getmtime(file_path)
+                    if file_time < cutoff_time:
+                        os.remove(file_path)
+                        deleted_count += 1
+        
+        await event.reply(f"Cleanup complete. Deleted {deleted_count} old files.")
+    except Exception as e:
+        await event.reply(f"Error during cleanup: {str(e)}")
+
+async def is_admin_or_owner(client, user_id):
+    """Check if user is an admin or the bot owner."""
+    # You can define a list of admin IDs in config.py
+    try:
+        from config import ADMIN_IDS
+        if user_id in ADMIN_IDS:
+            return True
+    except ImportError:
+        pass
+        
+    # Always return False if no admin IDs are defined or user is not an admin
+    return False
+
 # Function to register all handlers
 def register_yt_handlers(client: TelegramClient):
     """Register all YouTube download handlers with the Telethon client."""
@@ -1363,7 +1542,12 @@ def register_yt_handlers(client: TelegramClient):
     client.add_event_handler(yt_audio_button)
     client.add_event_handler(yt_subs_callback)
     client.add_event_handler(ignore_callback)
+    client.add_event_handler(cleanup_downloads)
     
     # Initialize user_data if not already available
     if not hasattr(client, 'user_data'):
         client.user_data = {}
+    
+    # Reset the active_downloads dictionary on startup
+    global active_downloads
+    active_downloads = {}
