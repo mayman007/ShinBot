@@ -335,6 +335,11 @@ async def download_video(url: str, video_format_id: str, best_audio: Optional[Di
     if user_id is None:
         user_id = chat_id if chat_id > 0 else None
     
+    # We should already have info from the button handler, but if not, fetch it
+    # but first update the UI to show we're preparing the download
+    tracker = ProgressTracker(client, chat_id, message_id, f"Preparing {resolution} download...")
+    await tracker.update_progress(0, 1, 0, None, force=True)
+    
     info = await extract_info(url)
     safe_title = sanitize_filename(info.get("title", "video"))
     
@@ -342,9 +347,9 @@ async def download_video(url: str, video_format_id: str, best_audio: Optional[Di
     user_downloads_dir = get_user_downloads_dir(user_id)
     expected_filename = os.path.join(user_downloads_dir, f"{safe_title} - {resolution}.mp4")
     
-    # Initial progress message
-    initial_message = f"Starting download: {safe_title} [{resolution}]"
-    tracker = ProgressTracker(client, chat_id, message_id, initial_message)
+    # Update the progress message to show we're now initializing the download
+    tracker.description = f"Initializing download for: {safe_title} [{resolution}]"
+    await tracker.update_progress(0, 1, 0, None, force=True)
     
     # Initialize progress state with simpler tracking
     progress = {
@@ -1051,6 +1056,9 @@ async def yt_quality_button(event):
                 await event.edit(f"⚠️ You already have an active download in progress:\n\n{active_downloads[user_id]}\n\nPlease wait for it to complete.")
                 return
             
+            # Immediately update the message to inform the user we're working
+            await event.edit("🔍 Preparing download... fetching video details")
+            
             # Get user data
             user_data_key = f"yt_data_{event.chat_id}_{event.sender_id}"
             yt_data = getattr(event.client, 'user_data', {}).get(user_data_key)
@@ -1072,13 +1080,20 @@ async def yt_quality_button(event):
             video_format_id = selected['format'].get('format_id')
             stream_type = selected['stream_type']
             
-            # Mark this user as having an active download
-            info = await extract_info(video_url)
-            video_title = info.get('title', 'Unknown video')
-            active_downloads[user_id] = f"{video_title} [{resolution}]"
+            # Update message with more details as we make progress
+            await event.edit(f"⏳ Fetching video metadata for {resolution} download...")
             
-            # Update message to show initial download state
-            await event.edit(f"Starting download at {resolution}... Please wait.")
+            # Get info and mark this user as having an active download
+            try:
+                info = await extract_info(video_url)
+                video_title = info.get('title', 'Unknown video')
+                active_downloads[user_id] = f"{video_title} [{resolution}]"
+            except Exception as e:
+                await event.edit(f"❌ Error fetching video information: {str(e)}")
+                return
+            
+            # Update message to show initialization state
+            await event.edit(f"⚙️ Initializing download for {resolution} quality...\n{video_title}")
             
             try:
                 # Download the video with progress updates and pass the user_id
@@ -1160,6 +1175,9 @@ async def yt_audio_button(event):
                 await event.edit(f"⚠️ You already have an active download in progress:\n\n{active_downloads[user_id]}\n\nPlease wait for it to complete.")
                 return
             
+            # Immediately notify user we're working
+            await event.edit("🔍 Preparing audio download...")
+            
             # Get audio options from user data
             audio_key = f"yt_audio_{event.chat_id}_{event.sender_id}"
             audio_options = getattr(event.client, 'user_data', {}).get(audio_key)
@@ -1188,8 +1206,8 @@ async def yt_audio_button(event):
             audio_format_id = selected["format"].get("format_id")
             quality_str = f"{selected['abr']}kbps"
             
-            # Update message to show initial download state
-            await event.edit(f"Starting download at {selected['abr']} kbps...")
+            # Update message to show initialization state
+            await event.edit(f"⚙️ Initializing audio download: {selected['abr']} kbps\n{audio_title}")
             
             try:
                 # Download the audio with progress updates and pass the user_id
@@ -1287,14 +1305,14 @@ async def yt_subs_callback(event):
             if not filename or not os.path.exists(filename):
                 await event.edit(f"Error: Subtitles for {lang} not available or could not be downloaded.")
                 return
-                
+            
             # Check file size
             file_size = os.path.getsize(filename)
             if file_size == 0:
                 await event.edit(f"Error: Downloaded subtitle file is empty.")
                 safe_delete(filename)
                 return
-                
+            
             # Read file into memory
             with open(filename, "rb") as f:
                 file_bytes = f.read()
@@ -1334,7 +1352,7 @@ async def cleanup_downloads(event):
     if not await is_admin_or_owner(event.client, event.sender_id):
         await event.reply("You don't have permission to use this command.")
         return
-
+    
     try:
         # Delete files older than 24 hours
         cutoff_time = time.time() - 86400  # 24 hours
