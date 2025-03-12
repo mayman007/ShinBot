@@ -42,7 +42,8 @@ async def get_chat_timer_table(connection, chat_id):
                 user_id INTEGER,
                 end_time TEXT,
                 reason TEXT,
-                message_id INTEGER
+                message_id INTEGER,
+                status TEXT DEFAULT 'active'
             )
         """)
         await connection.commit()
@@ -68,7 +69,7 @@ async def check_pending_timers(client):
             
             # Get all active timers for this chat
             async with connection.cursor() as cursor:
-                await cursor.execute(f"SELECT id, user_id, end_time, reason, message_id FROM {table_name}")
+                await cursor.execute(f"SELECT id, user_id, end_time, reason, message_id FROM {table_name} WHERE status = 'active'")
                 timers = await cursor.fetchall()
                 
                 for timer_id, user_id, end_time_str, reason, message_id in timers:
@@ -82,8 +83,8 @@ async def check_pending_timers(client):
                             end_message += f" Reason: {reason}"
                         await client.send_message(chat_id, end_message, reply_to=message_id)
                         
-                        # Delete the expired timer
-                        await cursor.execute(f"DELETE FROM {table_name} WHERE id = ?", (timer_id,))
+                        # Update the timer status to 'ended'
+                        await cursor.execute(f"UPDATE {table_name} SET status = 'ended' WHERE id = ?", (timer_id,))
                     else:
                         # Schedule timer notification for future
                         delay = (end_time - now).total_seconds()
@@ -98,36 +99,36 @@ async def check_pending_timers(client):
 async def schedule_timer(client, chat_id, timer_id, delay, reason, message_id=None):
     """
     Sleeps for the specified delay, then notifies the user that the timer has ended.
-    After sending a message, delete the timer from database.
+    After sending a message, update the timer status to 'ended'.
     """
     try:
         await asyncio.sleep(delay)
         
-        # Check if the timer still exists (wasn't deleted/cancelled)
+        # Check if the timer still exists and is active
         async with aiosqlite.connect("db/timers.db") as connection:
             table_name = await get_chat_timer_table(connection, chat_id)
             
             async with connection.cursor() as cursor:
                 await cursor.execute(
-                    f"SELECT id FROM {table_name} WHERE id = ?",
+                    f"SELECT id FROM {table_name} WHERE id = ? AND status = 'active'",
                     (timer_id,)
                 )
                 result = await cursor.fetchone()
                 
-                if result:  # Timer still exists
+                if result:  # Timer still exists and is active
                     # Send notification
                     end_message = "Your timer has ended."
                     if reason:
-                        end_message += f"\nReason: *{reason}*"
+                        end_message += f"\nReason: **{reason}**"
                     
                     if message_id:
                         await client.send_message(chat_id, end_message, reply_to=message_id, parse_mode="Markdown")
                     else:
                         await client.send_message(chat_id, end_message, parse_mode="Markdown")
                     
-                    # Delete the expired timer
+                    # Update the timer status to 'ended'
                     await cursor.execute(
-                        f"DELETE FROM {table_name} WHERE id = ?",
+                        f"UPDATE {table_name} SET status = 'ended' WHERE id = ?",
                         (timer_id,)
                     )
                     await connection.commit()
@@ -139,7 +140,7 @@ async def schedule_timer(client, chat_id, timer_id, delay, reason, message_id=No
 
 async def cancel_timer(chat_id, timer_id):
     """
-    Cancel a timer by deleting it from the database and
+    Cancel a timer by updating its status to 'canceled' and
     cancelling any scheduled task.
     """
     try:
@@ -149,15 +150,15 @@ async def cancel_timer(chat_id, timer_id):
             async with connection.cursor() as cursor:
                 # Check if timer exists
                 await cursor.execute(
-                    f"SELECT id FROM {table_name} WHERE id = ?",
+                    f"SELECT id FROM {table_name} WHERE id = ? AND status = 'active'",
                     (timer_id,)
                 )
                 result = await cursor.fetchone()
                 
                 if result:
-                    # Delete the timer
+                    # Update the timer status to 'canceled'
                     await cursor.execute(
-                        f"DELETE FROM {table_name} WHERE id = ?",
+                        f"UPDATE {table_name} SET status = 'canceled' WHERE id = ?",
                         (timer_id,)
                     )
                     await connection.commit()
@@ -175,3 +176,30 @@ async def cancel_timer(chat_id, timer_id):
     except Exception as e:
         print(f"Error cancelling timer: {e}")
         return False
+
+async def get_timers(chat_id, include_inactive=False):
+    """
+    Get all timers for a chat, optionally including inactive (ended/canceled) timers.
+    Returns a list of (id, user_id, end_time, reason, message_id, status) tuples.
+    """
+    try:
+        async with aiosqlite.connect("db/timers.db") as connection:
+            table_name = await get_chat_timer_table(connection, chat_id)
+            
+            async with connection.cursor() as cursor:
+                if include_inactive:
+                    # Get all timers regardless of status
+                    await cursor.execute(
+                        f"SELECT id, user_id, end_time, reason, message_id, status FROM {table_name}"
+                    )
+                else:
+                    # Get only active timers
+                    await cursor.execute(
+                        f"SELECT id, user_id, end_time, reason, message_id, status FROM {table_name} WHERE status = 'active'"
+                    )
+                
+                timers = await cursor.fetchall()
+                return timers
+    except Exception as e:
+        print(f"Error getting timers: {e}")
+        return []
