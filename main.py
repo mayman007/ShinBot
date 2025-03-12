@@ -53,10 +53,7 @@ def main():
         client.add_event_handler(command_handlers.imagine_command, events.NewMessage(pattern=r'^/imagine'))
 
     # YouTube command handlers
-    client.add_event_handler(yt_handlers.yt_command, events.NewMessage(pattern=r'^/yt'))
-    client.add_event_handler(yt_handlers.yt_quality_button, events.CallbackQuery(pattern=r"^yt_\d+"))
-    client.add_event_handler(yt_handlers.yt_audio_button, events.CallbackQuery(pattern=r'^yt_audio_\d+'))
-    client.add_event_handler(yt_handlers.yt_subs_callback, events.CallbackQuery(pattern=r'^subs_'))
+    yt_handlers.register_yt_handlers(client)  # Use the proper registration function
 
     # Register a handler for text messages that are not commands
     client.add_event_handler(
