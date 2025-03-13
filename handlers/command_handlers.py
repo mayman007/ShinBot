@@ -563,7 +563,7 @@ async def timer_command(event):
         )
         return
 
-    time_units = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800, "mo": 2592000, "y": 31104000}
+    time_units = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800, "mo": 2592000, "y": 31536000}
     
     # Extract the unit and value with improved support for decimal numbers
     unit_extracted = False
