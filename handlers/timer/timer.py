@@ -105,21 +105,15 @@ async def timer_command(event):
             # Float value
             time_display = f"{float_value} {time_unit_word}"
         
-        # Format the end time based on whether it's 24+ hours from now
-        if sleep_duration >= 86400:  # 24 hours or more
-            finish_time = end_time.strftime("%b %d, %Y at %H:%M:%S")
-        else:
-            finish_time = end_time.strftime("%H:%M:%S")
-        
         response_message = None
         if reason:
             response_message = await event.reply(
-                f"Timer set to **{time_display}**\nFinishes at: **{finish_time}**\nReason: **{reason}**",
+                f"Timer set to **{time_display}**\nReason: **{reason}**",
                 parse_mode="Markdown"
             )
         else:
             response_message = await event.reply(
-                f"Timer set to **{time_display}**\nFinishes at: **{finish_time}**",
+                f"Timer set to **{time_display}**",
                 parse_mode="Markdown"
             )
         
