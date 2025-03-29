@@ -4,7 +4,6 @@ import aiosqlite
 import ast
 
 # ---------- Callback Query Handler for Pagination ----------
-@events.register(events.CallbackQuery)
 async def button_click_handler(event):
     data = event.data.decode('utf-8')
     
@@ -153,7 +152,3 @@ async def button_click_handler(event):
                     (updated_index, str(event.message_id))
                 )
                 await connection.commit()
-
-# Register the handler
-def register_callback_handlers(client):
-    client.add_event_handler(button_click_handler)

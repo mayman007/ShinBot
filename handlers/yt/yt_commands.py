@@ -10,7 +10,7 @@ import socket
 import http.client
 from io import BytesIO
 from telethon import TelegramClient, events, Button, errors
-from typing import Dict, List, Optional, Any, Tuple, Set
+from typing import Dict, List, Optional, Any, Tuple
 
 from utils.usage import save_usage
 
