@@ -105,15 +105,21 @@ async def timer_command(event):
             # Float value
             time_display = f"{float_value} {time_unit_word}"
         
+        # Format the end time based on whether it's 24+ hours from now
+        if sleep_duration >= 86400:  # 24 hours or more
+            finish_time = end_time.strftime("%b %d, %Y at %H:%M:%S")
+        else:
+            finish_time = end_time.strftime("%H:%M:%S")
+        
         response_message = None
         if reason:
             response_message = await event.reply(
-                f"Timer set to **{time_display}**\nReason: **{reason}**",
+                f"Timer set to **{time_display}**\nFinishes at: **{finish_time}**\nReason: **{reason}**",
                 parse_mode="Markdown"
             )
         else:
             response_message = await event.reply(
-                f"Timer set to **{time_display}**",
+                f"Timer set to **{time_display}**\nFinishes at: **{finish_time}**",
                 parse_mode="Markdown"
             )
         
@@ -162,7 +168,7 @@ async def list_timers_command(event):
         
         async with connection.cursor() as cursor:
             await cursor.execute(
-                f"SELECT id, end_time, reason, user_id, status FROM {table_name} ORDER BY id"
+                f"SELECT id, end_time, reason, user_id, status FROM {table_name}"
             )
             timers = await cursor.fetchall()
     
@@ -170,54 +176,63 @@ async def list_timers_command(event):
         await event.reply("No timers in this chat.")
         return
     
+    # Filter active timers and calculate remaining time for sorting
+    active_timer_data = []
+    for db_id, end_time_str, reason, user_id, status in timers:
+        if status == 'active':
+            end_time = datetime.datetime.fromisoformat(end_time_str)
+            time_remaining = (end_time - now).total_seconds()
+            active_timer_data.append((db_id, end_time_str, reason, user_id, status, time_remaining))
+    
+    # Sort timers by time remaining (ascending)
+    active_timer_data.sort(key=lambda x: x[5])
+    
     # If no ID provided, list all timers that the user can remove
     lines = ["**🔔 Active Timers:**\n\n"]
     active_timers = False
     
-    for db_id, end_time_str, reason, user_id, status in timers:
-        # Only show active timers
-        if status == 'active':
-            active_timers = True
+    for db_id, end_time_str, reason, user_id, status, _ in active_timer_data:
+        active_timers = True
+        
+        # Format time remaining for active timers only
+        end_time = datetime.datetime.fromisoformat(end_time_str)
+        diff = end_time - now
+        
+        # Format time display
+        if diff.total_seconds() <= 0:
+            time_left = "Ending soon..."
+        else:
+            d = diff.days
+            h, remainder = divmod(diff.seconds, 3600)
+            m, s = divmod(remainder, 60)
             
-            # Format time remaining for active timers only
-            end_time = datetime.datetime.fromisoformat(end_time_str)
-            diff = end_time - now
+            time_parts = []
+            if d > 0:
+                time_parts.append(f"{d}d")
+            if h > 0 or d > 0:
+                time_parts.append(f"{h}h")
+            if m > 0 or h > 0 or d > 0:
+                time_parts.append(f"{m}m")
+            time_parts.append(f"{s}s")
             
-            # Format time display
-            if diff.total_seconds() <= 0:
-                time_left = "Ending soon..."
-            else:
-                d = diff.days
-                h, remainder = divmod(diff.seconds, 3600)
-                m, s = divmod(remainder, 60)
-                
-                time_parts = []
-                if d > 0:
-                    time_parts.append(f"{d}d")
-                if h > 0 or d > 0:
-                    time_parts.append(f"{h}h")
-                if m > 0 or h > 0 or d > 0:
-                    time_parts.append(f"{m}m")
-                time_parts.append(f"{s}s")
-                
-                time_left = " ".join(time_parts)
+            time_left = " ".join(time_parts)
 
-            # Try to get user info
-            try:
-                timer_user = await event.client.get_entity(user_id)
-                if timer_user.username:
-                    user_display = f"{timer_user.username}"
-                else:
-                    user_display = f"{timer_user.first_name}"
-            except:
-                user_display = f"User {user_id}"
-            
-            # Add to list
-            lines.append(
-                f"**ID #{db_id}** ⏰ **{time_left}** remaining\n"
-                f"    👤 Set by: {user_display}\n"
-                f"    📝 Reason: {reason or 'No reason provided'}\n"
-            )
+        # Try to get user info
+        try:
+            timer_user = await event.client.get_entity(user_id)
+            if timer_user.username:
+                user_display = f"{timer_user.username}"
+            else:
+                user_display = f"{timer_user.first_name}"
+        except:
+            user_display = f"User {user_id}"
+        
+        # Add to list
+        lines.append(
+            f"**ID #{db_id}** ⏰ **{time_left}** remaining\n"
+            f"    👤 Set by: {user_display}\n"
+            f"    📝 Reason: {reason or 'No reason provided'}\n"
+        )
 
     if not active_timers:
         await event.reply("No active timers in this chat.")
@@ -287,7 +302,7 @@ async def remove_timer_command(event):
         
         async with connection.cursor() as cursor:
             await cursor.execute(
-                f"SELECT id, end_time, reason, user_id, status FROM {table_name} ORDER BY id"
+                f"SELECT id, end_time, reason, user_id, status FROM {table_name}"
             )
             timers = await cursor.fetchall()
     
@@ -324,52 +339,62 @@ async def remove_timer_command(event):
     lines = ["**🔔 Timers You Can Remove:**\n\n"]
     active_timers = False
     
+    # Filter timers and add remaining time for sorting
+    removable_timers = []
     for db_id, end_time_str, reason, user_id, status in timers:
         # Determine if this user can remove this timer
         can_remove = (sender.id == user_id or is_admin) and status == 'active'
         
         if can_remove:
-            active_timers = True
-            
-            # Format time remaining for active timers only
             end_time = datetime.datetime.fromisoformat(end_time_str)
-            diff = end_time - now
+            time_remaining = (end_time - now).total_seconds()
+            removable_timers.append((db_id, end_time_str, reason, user_id, status, time_remaining))
+    
+    # Sort timers by time remaining (ascending)
+    removable_timers.sort(key=lambda x: x[5])
+    
+    for db_id, end_time_str, reason, user_id, status, _ in removable_timers:
+        active_timers = True
+        
+        # Format time remaining for active timers only
+        end_time = datetime.datetime.fromisoformat(end_time_str)
+        diff = end_time - now
+        
+        # Format time display
+        if diff.total_seconds() <= 0:
+            time_left = "Ending soon..."
+        else:
+            d = diff.days
+            h, remainder = divmod(diff.seconds, 3600)
+            m, s = divmod(remainder, 60)
             
-            # Format time display
-            if diff.total_seconds() <= 0:
-                time_left = "Ending soon..."
+            time_parts = []
+            if d > 0:
+                time_parts.append(f"{d}d")
+            if h > 0 or d > 0:
+                time_parts.append(f"{h}h")
+            if m > 0 or h > 0 or d > 0:
+                time_parts.append(f"{m}m")
+            time_parts.append(f"{s}s")
+            
+            time_left = " ".join(time_parts)
+        
+        # Try to get user info
+        try:
+            timer_user = await event.client.get_entity(user_id)
+            if timer_user.username:
+                user_display = f"{timer_user.username}"
             else:
-                d = diff.days
-                h, remainder = divmod(diff.seconds, 3600)
-                m, s = divmod(remainder, 60)
-                
-                time_parts = []
-                if d > 0:
-                    time_parts.append(f"{d}d")
-                if h > 0 or d > 0:
-                    time_parts.append(f"{h}h")
-                if m > 0 or h > 0 or d > 0:
-                    time_parts.append(f"{m}m")
-                time_parts.append(f"{s}s")
-                
-                time_left = " ".join(time_parts)
-            
-            # Try to get user info
-            try:
-                timer_user = await event.client.get_entity(user_id)
-                if timer_user.username:
-                    user_display = f"{timer_user.username}"
-                else:
-                    user_display = f"{timer_user.first_name}"
-            except:
-                user_display = f"User {user_id}"
-            
-            # Add to list
-            lines.append(
-                f"**ID #{db_id}** ⏰ **{time_left}** remaining\n"
-                f"    👤 Set by: {user_display}\n"
-                f"    📝 Reason: {reason or 'No reason provided'}\n"
-            )
+                user_display = f"{timer_user.first_name}"
+        except:
+            user_display = f"User {user_id}"
+        
+        # Add to list
+        lines.append(
+            f"**ID #{db_id}** ⏰ **{time_left}** remaining\n"
+            f"    👤 Set by: {user_display}\n"
+            f"    📝 Reason: {reason or 'No reason provided'}\n"
+        )
     
     if not active_timers:
         await event.reply("No active timers that you can remove.")
