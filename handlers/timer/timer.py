@@ -26,10 +26,18 @@ async def timer_command(event):
     if " " in timer_args:
         parts = timer_args.split(" ", 1)
         time_str = parts[0]
-        reason = parts[1]
+        reason = parts[1].strip()  # Strip whitespace from reason
     else:
         time_str = timer_args
         reason = ""
+    
+    # Check if reason exceeds max length
+    if len(reason) > 300:
+        await event.reply(
+            "Reason is too long! Please limit to 300 characters.",
+            parse_mode="Markdown"
+        )
+        return
     
     if not time_str:
         await event.reply(
