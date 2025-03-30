@@ -208,7 +208,12 @@ async def echo_command(event):
     if len(parts) < 2 or parts[1].strip() == "":
         await event.reply("Type something in the message")
     else:
-        await event.reply(parts[1].strip())
+        text = parts[1].strip()
+        # Check if input exceeds max length
+        if len(text) > 4000:
+            await event.reply("Message is too long! Please limit to 300 characters.")
+            return
+        await event.reply(text)
 
 # ---------------------------
 # Reverse Command Handler
@@ -221,5 +226,9 @@ async def reverse_command(event):
         await event.reply("Type some words.")
         return
     your_words = parts[1].strip()
+    # Check if input exceeds max length
+    if len(your_words) > 4000:
+        await event.reply("Message is too long! Please limit to 300 characters.")
+        return
     t_rev = your_words[::-1].replace("@", "@\u200B").replace("&", "&\u200B")
     await event.reply(f"🔁 {t_rev}")
