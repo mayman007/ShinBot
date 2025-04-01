@@ -28,6 +28,7 @@ async def help_command(event):
         "/aghpb - Anime girl holding programming book\n"
         "/anime - Search Anime\n"
         "/character - Search Anime & Manga characters\n"
+        "/choose - Make me choose for you\n"
         "/coinflip - Flip a coin\n"
         "/dadjoke - Get a random dad joke\n"
         "/dog - Get a random dog pic/vid/gif\n"

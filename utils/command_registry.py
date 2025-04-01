@@ -22,7 +22,9 @@ def register_handlers(client):
     client.add_event_handler(handlers.reverse_command, events.NewMessage(pattern=r'^/reverse'))
     client.add_event_handler(handlers.slot_command, events.NewMessage(pattern=r'^/slot'))
     client.add_event_handler(handlers.coinflip_command, events.NewMessage(pattern=r'^/coinflip'))
+    client.add_event_handler(handlers.choose_command, events.NewMessage(pattern=r'^/choose'))
     if ENABLE_MEME_COMMAND:
+        client.add_event_handler(handlers.meme_command, events.NewMessage(pattern=r'^/meme'))
         client.add_event_handler(handlers.meme_command, events.NewMessage(pattern=r'^/meme'))
     client.add_event_handler(handlers.geekjoke_command, events.NewMessage(pattern=r'^/geekjoke'))
     client.add_event_handler(handlers.dadjoke_command, events.NewMessage(pattern=r'^/dadjoke'))
