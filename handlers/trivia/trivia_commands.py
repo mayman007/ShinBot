@@ -1,6 +1,8 @@
 import random
 import praw
 import aiohttp
+import asyncio
+import time
 from config import REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET, REDDIT_USER_AGENT
 from utils.usage import save_usage
 
@@ -232,3 +234,79 @@ async def reverse_command(event):
         return
     t_rev = your_words[::-1].replace("@", "@\u200B").replace("&", "&\u200B")
     await event.reply(f"🔁 {t_rev}")
+
+# Dictionary to track user cooldowns for the choose command
+choose_cooldowns = {}  # user_id -> timestamp
+
+# ---------------------------
+# Choose Command Handler
+# ---------------------------
+async def choose_command(event):
+    chat = await event.get_chat()
+    await save_usage(chat, "choose")
+    
+    # Get user ID for rate limiting
+    try:
+        user_id = event.sender_id
+        current_time = time.time()
+        
+        # Check if user is on cooldown
+        if user_id in choose_cooldowns:
+            last_used = choose_cooldowns[user_id]
+            time_passed = current_time - last_used
+            if time_passed < 20:  # 20-second cooldown
+                remaining = int(20 - time_passed)
+                await event.reply(f"Please wait {remaining} seconds before using this command again.")
+                return
+    
+        # Update the cooldown timestamp
+        choose_cooldowns[user_id] = current_time
+    except Exception as e:
+        # If we can't get the sender ID for some reason, continue without rate limiting
+        pass
+    
+    # Get the text after the command
+    parts = event.message.message.split(maxsplit=1)
+    
+    if len(parts) < 2 or not parts[1].strip():
+        await event.reply("Please provide options to choose from, separated by commas. Example: /choose option1, option2, option3")
+        return
+    
+    # Replace both Latin and Arabic commas with a common delimiter, then split
+    input_text = parts[1].replace(',', '|').replace('،', '|')
+    
+    # Split the text by the common delimiter and strip whitespace
+    options = [option.strip() for option in input_text.split('|')]
+    
+    # Filter out empty options
+    options = [option for option in options if option]
+    
+    if not options:
+        await event.reply("No valid options provided. Please use format: /choose option1, option2, option3")
+        return
+    
+    if len(options) == 1:
+        await event.reply("I need at least two options to make a choice!")
+        return
+    
+    # Select a random option
+    chosen_option = random.choice(options)
+    
+    try:
+        
+        # Send initial "thinking" message
+        response = await event.reply("Hmmm...")
+        
+        # First edit after a short delay
+        await asyncio.sleep(2)
+        await response.edit(text="Lemme think for a bit...")
+
+        # Second edit after a short delay
+        await asyncio.sleep(4)
+        await response.edit(text="Okay, I choose: ...")
+        
+        # Final edit with the answer
+        await asyncio.sleep(1.5)
+        await response.edit(text=f"Okay, I choose: **{chosen_option}**")
+    except Exception as e:
+        await event.reply(f"Error while choosing: {str(e)}")
