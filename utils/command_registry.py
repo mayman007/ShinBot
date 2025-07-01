@@ -8,6 +8,8 @@ def register_handlers(client):
 
     client.add_event_handler(handlers.start_command, events.NewMessage(pattern=r'(?i)^/start'))
     client.add_event_handler(handlers.help_command, events.NewMessage(pattern=r'(?i)^/help'))
+    client.add_event_handler(handlers.mute_command, events.NewMessage(pattern=r'(?i)^/mute'))
+    client.add_event_handler(handlers.unmute_command, events.NewMessage(pattern=r'(?i)^/unmute'))
     client.add_event_handler(handlers.list_join_dates, events.NewMessage(pattern=r'(?i)^/joindate'))
     client.add_event_handler(handlers.usagedata_command, events.NewMessage(pattern=r'(?i)^/usagedata'))
     client.add_event_handler(handlers.character_command, events.NewMessage(pattern=r'(?i)^/character'))
