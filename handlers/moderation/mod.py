@@ -1,13 +1,14 @@
 import re
 from datetime import datetime, timedelta
-from telethon import errors
+from pyrogram import Client, types
+from pyrogram.errors import UserAdminInvalid
 from utils.usage import save_usage
 
 # ---------------------------
 # tst command
 # ---------------------------
-async def tst(event):
-    chat = await event.get_chat()
+async def tst(client: Client, message: types.Message):
+    chat = message.chat
     await save_usage(chat, "tst")
     
     print("TST command executed")
@@ -15,26 +16,25 @@ async def tst(event):
 # ---------------------------
 # Mute command
 # ---------------------------
-async def mute_command(event):
-    chat = await event.get_chat()
+async def mute_command(client: Client, message: types.Message):
+    chat = message.chat
     await save_usage(chat, "mute")
     
     # Check if the user has admin privileges
-    sender = await event.get_sender()
-    sender_id = sender.id
+    sender = message.from_user
     
     # Check if sender has admin permissions in the chat
     try:
-        participant = await event.client.get_permissions(chat.id, sender_id)
-        if not (participant.is_admin or participant.is_creator):
-            await event.reply("You don't have permission to use this command.")
+        member = await client.get_chat_member(chat.id, sender.id)
+        if member.status not in ('administrator', 'creator'):
+            await message.reply("You don't have permission to use this command.")
             return
     except Exception as e:
-        await event.reply(f"Error checking permissions: {str(e)}")
+        await message.reply(f"Error checking permissions: {str(e)}")
         return
     
     # Extract command arguments
-    args = event.text.split(' ')
+    args = message.text.split(' ')
     duration = None  # Default: infinite mute
     reason_parts = []
     time_found = False
@@ -63,71 +63,39 @@ async def mute_command(event):
     
     # Get target user from reply or mention
     target_user = None
-    mention_positions = []  # Track positions of mentions in the message
     
-    if event.reply_to_msg_id:
-        replied_msg = await event.get_reply_message()
-        target_user = await replied_msg.get_sender()
+    if message.reply_to_message:
+        target_user = message.reply_to_message.from_user
     else:
         # Try to get mentioned user
-        entities = event.message.entities
+        entities = message.entities
         if entities:
             for entity in entities:
-                if hasattr(entity, 'user_id'):
-                    # This handles MessageEntityMentionName (direct mention with ID)
-                    target_user = await event.client.get_entity(entity.user_id)
-                    mention_positions.append((entity.offset, entity.offset + entity.length))
+                if entity.type == 'mention':
+                    mention_text = message.text[entity.offset:entity.offset+entity.length]
+                    try:
+                        target_user = await client.get_users(mention_text)
+                        break
+                    except:
+                        continue
+                elif entity.type == 'text_mention':
+                    target_user = entity.user
                     break
-                elif hasattr(entity, 'offset') and hasattr(entity, 'length'):
-                    # This handles text mentions (@username)
-                    mention_text = event.raw_text[entity.offset:entity.offset+entity.length]
-                    if mention_text.startswith('@'):
-                        try:
-                            username = mention_text[1:]  # Remove the @ symbol
-                            target_user = await event.client.get_entity(username)
-                            mention_positions.append((entity.offset, entity.offset + entity.length))
-                            break
-                        except:
-                            continue
     
     if not target_user:
-        await event.reply("Please reply to a message or mention a user to mute them.")
+        await message.reply("Please reply to a message or mention a user to mute them.")
         return
-    
-    # Filter out mentions from the reason
-    clean_reason_parts = []
-    for i, part in enumerate(reason_parts):
-        # Check if this part contains a mention
-        is_mention = False
-        for original_pos in mention_positions:
-            # Find where this part appears in the original text
-            part_pos = event.raw_text.find(part)
-            if part_pos >= 0:
-                # Check if this part overlaps with a mention
-                if (part_pos <= original_pos[1] and part_pos + len(part) >= original_pos[0]):
-                    is_mention = True
-                    break
-        
-        if not is_mention:
-            clean_reason_parts.append(part)
-    
-    reason = "No reason provided" if not clean_reason_parts else ' '.join(clean_reason_parts)
     
     # Calculate until when the user will be muted (None for infinite)
     mute_until = None if duration is None else datetime.now() + timedelta(minutes=duration)
     
     try:
         # Apply mute restriction
-        await event.client.edit_permissions(
+        await client.restrict_chat_member(
             chat.id,
             target_user.id,
-            until_date=mute_until,
-            send_messages=False,
-            send_media=False,
-            send_stickers=False,
-            send_gifs=False,
-            send_games=False,
-            send_inline=False
+            types.ChatPermissions(), # No permissions
+            until_date=mute_until
         )
         
         # Send confirmation message
@@ -139,83 +107,71 @@ async def mute_command(event):
                 seconds = int(duration * 60)
                 mute_time_str = f"for {seconds} seconds"
         
-        await event.respond(
+        await message.reply_text(
             f"User {target_user.first_name} has been muted {mute_time_str}.\n"
             f"Reason: {reason}"
         )
-    except errors.ChatAdminRequiredError:
-        await event.reply("I need admin privileges to mute users.")
+    except UserAdminInvalid:
+        await message.reply("I need admin privileges to mute users.")
     except Exception as e:
-        await event.reply(f"An error occurred: {str(e)}")
+        await message.reply(f"An error occurred: {str(e)}")
 
 # ---------------------------
 # Unmute command
 # ---------------------------
-async def unmute_command(event):
-    chat = await event.get_chat()
+async def unmute_command(client: Client, message: types.Message):
+    chat = message.chat
     await save_usage(chat, "unmute")
     
     # Check if the user has admin privileges
-    sender = await event.get_sender()
-    sender_id = sender.id
+    sender = message.from_user
     
     # Check if sender has admin permissions in the chat
     try:
-        participant = await event.client.get_permissions(chat.id, sender_id)
-        if not (participant.is_admin or participant.is_creator):
-            await event.reply("You don't have permission to use this command.")
+        member = await client.get_chat_member(chat.id, sender.id)
+        if member.status not in ('administrator', 'creator'):
+            await message.reply("You don't have permission to use this command.")
             return
     except Exception as e:
-        await event.reply(f"Error checking permissions: {str(e)}")
+        await message.reply(f"Error checking permissions: {str(e)}")
         return
     
     # Get target user from reply or mention
     target_user = None
     
-    if event.reply_to_msg_id:
-        replied_msg = await event.get_reply_message()
-        target_user = await replied_msg.get_sender()
+    if message.reply_to_message:
+        target_user = message.reply_to_message.from_user
     else:
         # Try to get mentioned user
-        entities = event.message.entities
+        entities = message.entities
         if entities:
             for entity in entities:
-                if hasattr(entity, 'user_id'):
-                    # This handles MessageEntityMentionName (direct mention with ID)
-                    target_user = await event.client.get_entity(entity.user_id)
+                if entity.type == 'mention':
+                    mention_text = message.text[entity.offset:entity.offset+entity.length]
+                    try:
+                        target_user = await client.get_users(mention_text)
+                        break
+                    except:
+                        continue
+                elif entity.type == 'text_mention':
+                    target_user = entity.user
                     break
-                elif hasattr(entity, 'offset') and hasattr(entity, 'length'):
-                    # This handles text mentions (@username)
-                    mention_text = event.raw_text[entity.offset:entity.offset+entity.length]
-                    if mention_text.startswith('@'):
-                        try:
-                            username = mention_text[1:]  # Remove the @ symbol
-                            target_user = await event.client.get_entity(username)
-                            break
-                        except:
-                            continue
     
     if not target_user:
-        await event.reply("Please reply to a message or mention a user to unmute them.")
+        await message.reply("Please reply to a message or mention a user to unmute them.")
         return
     
     # Remove the problematic checking code and proceed directly to unmuting
     try:
-        # Remove mute restrictions
-        await event.client.edit_permissions(
+        # Remove mute restrictions by setting default permissions
+        await client.unban_chat_member(
             chat.id,
-            target_user.id,
-            send_messages=True,
-            send_media=True,
-            send_stickers=True,
-            send_gifs=True,
-            send_games=True,
-            send_inline=True
+            target_user.id
         )
         
         # Send confirmation message
-        await event.respond(f"User {target_user.first_name} has been unmuted.")
-    except errors.ChatAdminRequiredError:
-        await event.reply("I need admin privileges to unmute users.")
+        await message.reply_text(f"User {target_user.first_name} has been unmuted.")
+    except UserAdminInvalid:
+        await message.reply("I need admin privileges to unmute users.")
     except Exception as e:
-        await event.reply(f"An error occurred: {str(e)}")
+        await message.reply(f"An error occurred: {str(e)}")

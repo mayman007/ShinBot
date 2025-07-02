@@ -1,22 +1,22 @@
 import random
-from telethon import events
+from pyrogram import Client, types
 
-async def message_event(event: events.NewMessage.Event):
+async def message_event(client: Client, message: types.Message):
     # Ensure the message and its text exist
-    if not event.message or not event.message.text:
+    if not message or not message.text:
         return
 
-    text = event.message.text
+    text = message.text
 
     # تثبيحات
     if text.startswith("ثبح ") or text == "ثبح":
-        await event.reply("ثباحو")
+        await message.reply("ثباحو")
     elif text.startswith("ثباحو ") or text == "ثباحو":
-        await event.reply("ثبح")
+        await message.reply("ثبح")
     elif text.startswith("مثائو ") or text == "مثائو":
-        await event.reply("مثا")
+        await message.reply("مثا")
     elif text.startswith("مثا ") or text == "مثا":
-        await event.reply("مثائو")
+        await message.reply("مثائو")
 
     # يالبوت
     if "يالبوت" in text:
@@ -47,44 +47,44 @@ async def message_event(event: events.NewMessage.Event):
 
         # me responses
         if "انا" in text:
-            sender = await event.get_sender()
+            sender = message.from_user
             if sender and sender.username == "Shinobi7k":
                 if "ابوك" in text:
-                    await event.reply(random.choice(father))
+                    await message.reply(random.choice(father))
                     return
 
         # shinobi responses
         for word in shinobi_keywords:
             if word in text:
                 if "ابوك" in text:
-                    await event.reply(random.choice(father))
+                    await message.reply(random.choice(father))
                     return
                 if "بيعذبك" in text:
-                    await event.reply(random.choice(azab))
+                    await message.reply(random.choice(azab))
                     return
                 if "بتطبل" in text:
-                    await event.reply(random.choice(tabla))
+                    await message.reply(random.choice(tabla))
                     return
 
         # steins responses
         for word in steins_keys:
             if word in text:
-                await event.reply(random.choice(steins))
+                await message.reply(random.choice(steins))
                 return
 
         # exceptions
         if "هكسب" in text:
-            await event.reply(random.choice(win))
+            await message.reply(random.choice(win))
             return
         if "حبك" in text or "حبق" in text:
-            await event.reply(random.choice(love))
+            await message.reply(random.choice(love))
             return
         if "عامل ايه" in text or "عامل إيه" in text or "كيف حالك" in text:
-            await event.reply(random.choice(elhal))
+            await message.reply(random.choice(elhal))
             return
 
         # normal responses
         if " " in text:
-            await event.reply(random.choice(normal_responses))
+            await message.reply(random.choice(normal_responses))
         else:
-            await event.reply(random.choice(hellos))
+            await message.reply(random.choice(hellos))

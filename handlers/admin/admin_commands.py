@@ -1,13 +1,14 @@
 import asyncio
 import aiosqlite
+from pyrogram import Client, types
 from config import ADMIN_IDS
 
 # ---------------------------
 # Usagedata command
 # ---------------------------
-async def usagedata_command(event):
+async def usagedata_command(client: Client, message: types.Message):
     # Check if sender is admin
-    if event.sender_id in ADMIN_IDS:
+    if message.from_user.id in ADMIN_IDS:
         data_message = "Here is all the usage data!\n"
         async with aiosqlite.connect("db/usage.db") as connection:
             async with connection.cursor() as cursor:
@@ -36,9 +37,9 @@ async def usagedata_command(event):
         if len(data_message) > limit:
             parts = [data_message[i: i + limit] for i in range(0, len(data_message), limit)]
             for part in parts:
-                await event.reply(part)
+                await message.reply(part)
                 await asyncio.sleep(0.5)
         else:
-            await event.reply(data_message)
+            await message.reply(data_message)
     else:
-        await event.reply("You're not allowed to use this command")
+        await message.reply("You're not allowed to use this command")

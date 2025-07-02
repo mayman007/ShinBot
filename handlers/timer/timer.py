@@ -2,17 +2,18 @@ import asyncio
 import datetime
 import aiosqlite
 from utils.usage import save_usage
+from pyrogram import Client, types
 from handlers.timer.timer_scheduler import get_chat_timer_table, schedule_timer, cancel_timer
 
 # ---------------------------
 # Timer Command Handler
 # ---------------------------
-async def timer_command(event):
-    chat = await event.get_chat()
+async def timer_command(client: Client, message: types.Message):
+    chat = message.chat
     await save_usage(chat, "timer")
     
     # Improved command parsing that handles username suffix
-    text = event.raw_text
+    text = message.text
     command_parts = text.split(None, 1)
     command = command_parts[0].split('@')[0]  # This removes any bot username
     
@@ -33,16 +34,14 @@ async def timer_command(event):
     
     # Check if reason exceeds max length
     if len(reason) > 300:
-        await event.reply(
-            "Reason is too long! Please limit to 300 characters.",
-            parse_mode="Markdown"
+        await message.reply(
+            "Reason is too long! Please limit to 300 characters."
         )
         return
     
     if not time_str:
-        await event.reply(
-            "Type time and time unit (s, m, h, d, mo, w, y) correctly\nFor example: `/timer 30m remind me of studying`",
-            parse_mode="Markdown"
+        await message.reply(
+            "Type time and time unit (s, m, h, d, mo, w, y) correctly\nFor example: `/timer 30m remind me of studying`"
         )
         return
 
@@ -58,9 +57,8 @@ async def timer_command(event):
             break
     
     if not unit_extracted:
-        await event.reply(
-            "Invalid time unit. Use s (seconds), m (minutes), h (hours), d (days), w (weeks), mo (months), or y (years)",
-            parse_mode="Markdown"
+        await message.reply(
+            "Invalid time unit. Use s (seconds), m (minutes), h (hours), d (days), w (weeks), mo (months), or y (years)"
         )
         return
     
@@ -78,17 +76,15 @@ async def timer_command(event):
         # Check if timer is too long (30 years max)
         MAX_TIMER = 30 * 365 * 24 * 3600  # 30 years in seconds
         if sleep_duration > MAX_TIMER:
-            await event.reply(
-                "Timer too long! Maximum allowed is 30 years.",
-                parse_mode="Markdown"
+            await message.reply(
+                "Timer too long! Maximum allowed is 30 years."
             )
             return
         
         # Check if timer is too short (1 second min)
         if sleep_duration < 1:
-            await event.reply(
-                "Timer too short! Minimum allowed is 1 second.",
-                parse_mode="Markdown"
+            await message.reply(
+                "Timer too short! Minimum allowed is 1 second."
             )
             return
         
@@ -115,19 +111,17 @@ async def timer_command(event):
         
         response_message = None
         if reason:
-            response_message = await event.reply(
-                f"Timer set to **{time_display}**\nReason: **{reason}**",
-                parse_mode="Markdown"
+            response_message = await message.reply(
+                f"Timer set to **{time_display}**\nReason: **{reason}**"
             )
         else:
-            response_message = await event.reply(
-                f"Timer set to **{time_display}**",
-                parse_mode="Markdown"
+            response_message = await message.reply(
+                f"Timer set to **{time_display}**"
             )
         
-        sender = await event.get_sender()
+        sender = message.from_user
         user_id = sender.id
-        message_id = event.id  # Get the ID of the command message
+        message_id = message.id  # Get the ID of the command message
         
         # Save the timer to chat-specific table in timers.db
         async with aiosqlite.connect("db/timers.db") as connection:
@@ -143,25 +137,22 @@ async def timer_command(event):
         
         # Schedule the timer with its ID
         delay = (end_time - datetime.datetime.now()).total_seconds()
-        asyncio.create_task(schedule_timer(event.client, chat.id, timer_id, delay, reason, message_id))
+        asyncio.create_task(schedule_timer(client, chat.id, timer_id, delay, reason, message_id))
     except ValueError:
-        await event.reply(
-            "Please enter a valid number for the timer.",
-            parse_mode="Markdown"
+        await message.reply(
+            "Please enter a valid number for the timer."
         )
     except Exception as e:
-        await event.reply(
-            f"An error occurred: {str(e)}",
-            parse_mode="Markdown"
+        await message.reply(
+            f"An error occurred: {str(e)}"
         )
 
 # List timers command
-async def list_timers_command(event):
+async def list_timers_command(client: Client, message: types.Message):
     """Display active timers in the chat with detailed information."""
-    chat = await event.get_chat()
-    sender = await event.get_sender()
+    chat = message.chat
+    sender = message.from_user
     await save_usage(chat, "timerslist")
-    timer_id = None
 
     # Get all timers for this chat
     now = datetime.datetime.now()
@@ -175,7 +166,7 @@ async def list_timers_command(event):
             timers = await cursor.fetchall()
     
     if not timers:
-        await event.reply("No timers in this chat.")
+        await message.reply("No timers in this chat.")
         return
     
     # Filter active timers and calculate remaining time for sorting
@@ -221,7 +212,7 @@ async def list_timers_command(event):
 
         # Try to get user info
         try:
-            timer_user = await event.client.get_entity(user_id)
+            timer_user = await client.get_users(user_id)
             if timer_user.username:
                 user_display = f"{timer_user.username}"
             else:
@@ -237,13 +228,13 @@ async def list_timers_command(event):
         )
 
     if not active_timers:
-        await event.reply("No active timers in this chat.")
+        await message.reply("No active timers in this chat.")
         return
 
     # Handle message length limit 
     full_message = "\n".join(lines)
     if len(full_message) <= 4000:
-        await event.reply(full_message, parse_mode="Markdown")
+        await message.reply(full_message)
     else:
         # Split message into multiple parts
         messages = []
@@ -266,34 +257,34 @@ async def list_timers_command(event):
         messages.append(current_message)
         
         for msg in messages:
-            await event.reply(msg, parse_mode="Markdown")
+            await message.reply(msg)
             await asyncio.sleep(0.5)
 
 # Remove timer command
-async def remove_timer_command(event):
+async def remove_timer_command(client: Client, message: types.Message):
     """
     Allows users to remove timers they've set or admins to remove any timer in the chat
     """
-    chat = await event.get_chat()
-    sender = await event.get_sender()
+    chat = message.chat
+    sender = message.from_user
     await save_usage(chat, "timerdel")
     
     # Check if user provided a timer ID
-    command_parts = event.raw_text.split()
+    command_parts = message.text.split()
     timer_id = None
     if len(command_parts) > 1:
         try:
             timer_id = int(command_parts[1])
         except ValueError:
-            await event.reply("Invalid timer ID. Please provide a numeric ID from the timer list.")
+            await message.reply("Invalid timer ID. Please provide a numeric ID from the timer list.")
             return
     
     # Get the user's permissions
     is_admin = False
-    if event.is_group or event.is_channel:
+    if chat.type in ['group', 'supergroup']:
         try:
-            participant = await event.client.get_permissions(chat, sender.id)
-            is_admin = participant.is_admin
+            participant = await client.get_chat_member(chat.id, sender.id)
+            is_admin = participant.status in ['administrator', 'creator']
         except Exception:
             is_admin = False
     
@@ -309,7 +300,7 @@ async def remove_timer_command(event):
             timers = await cursor.fetchall()
     
     if not timers:
-        await event.reply("No timers in this chat.")
+        await message.reply("No timers in this chat.")
         return
     
     # If timer_id was provided, try to remove that specific timer
@@ -324,17 +315,17 @@ async def remove_timer_command(event):
                     if status == 'active':
                         success = await cancel_timer(chat.id, db_id)
                         if success:
-                            await event.reply(f"✅ Timer #{db_id} has been canceled.")
+                            await message.reply(f"✅ Timer #{db_id} has been canceled.")
                         else:
-                            await event.reply("❌ Failed to cancel timer. It may have already ended.")
+                            await message.reply("❌ Failed to cancel timer. It may have already ended.")
                     else:
-                        await event.reply(f"❌ Timer #{db_id} is already {status} and cannot be canceled.")
+                        await message.reply(f"❌ Timer #{db_id} is already {status} and cannot be canceled.")
                 else:
-                    await event.reply("❌ You can only remove your own timers (or you need to be an admin).")
+                    await message.reply("❌ You can only remove your own timers (or you need to be an admin).")
                 break
                 
         if not found:
-            await event.reply(f"❌ Timer #{timer_id} not found.")
+            await message.reply(f"❌ Timer #{timer_id} not found.")
         return
     
     # If no ID provided, list all timers that the user can remove
@@ -383,7 +374,7 @@ async def remove_timer_command(event):
         
         # Try to get user info
         try:
-            timer_user = await event.client.get_entity(user_id)
+            timer_user = await client.get_users(user_id)
             if timer_user.username:
                 user_display = f"{timer_user.username}"
             else:
@@ -399,7 +390,7 @@ async def remove_timer_command(event):
         )
     
     if not active_timers:
-        await event.reply("No active timers that you can remove.")
+        await message.reply("No active timers that you can remove.")
         return
     
     lines.append("\nUse `/timerdel ID` to cancel a specific timer.")
@@ -407,7 +398,7 @@ async def remove_timer_command(event):
     # Handle message length limit 
     full_message = "\n".join(lines)
     if len(full_message) <= 4000:
-        await event.reply(full_message, parse_mode="Markdown")
+        await message.reply(full_message)
     else:
         # Split message into multiple parts
         messages = []
@@ -430,5 +421,5 @@ async def remove_timer_command(event):
         messages.append(current_message)
         
         for msg in messages:
-            await event.reply(msg, parse_mode="Markdown")
+            await message.reply(msg)
             await asyncio.sleep(0.5)

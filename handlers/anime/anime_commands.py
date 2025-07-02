@@ -1,7 +1,7 @@
 import io
 import aiohttp
 import aiosqlite
-from telethon import Button
+from pyrogram import Client, types
 from config import BOT_USERNAME
 from utils.usage import save_usage
 
@@ -9,14 +9,14 @@ from utils.usage import save_usage
 # ---------------------------
 # Anime Command Handler
 # ---------------------------
-async def anime_command(event):
-    chat = await event.get_chat()
+async def anime_command(client: Client, message: types.Message):
+    chat = message.chat
     await save_usage(chat, "anime")
     
-    text = event.message.message
+    text = message.text
     query = text.replace("/anime", "").replace(f"@{BOT_USERNAME}", "").strip()
     if not query:
-        await event.reply("Please provide a search query.")
+        await message.reply("Please provide a search query.")
         return
 
     index = 0
@@ -27,7 +27,7 @@ async def anime_command(event):
                 if response.status == 200:
                     results = await response.json()
                 else:
-                    await event.reply(f"API Error: Status {response.status}")
+                    await message.reply(f"API Error: Status {response.status}")
                     return
 
         for result in results.get('data', []):
@@ -59,24 +59,25 @@ async def anime_command(event):
             if index == 10:
                 break
     except Exception as e:
-        await event.reply(f"Error fetching data: {str(e)}")
+        await message.reply(f"Error fetching data: {str(e)}")
         return
 
     if index == 0:
-        await event.reply("No results found.")
+        await message.reply("No results found.")
         return
 
     try:
+        buttons = []
         if anime_results_list[0]['trailer'] is None:
             buttons = [
-                [Button.inline("Previous", data="animeprev"), Button.inline("Next", data="animenext")],
-                [Button.url("Open in MAL", anime_results_list[0]['url'])]
+                [types.InlineKeyboardButton("Previous", callback_data="animeprev"), types.InlineKeyboardButton("Next", callback_data="animenext")],
+                [types.InlineKeyboardButton("Open in MAL", url=anime_results_list[0]['url'])]
             ]
         else:
             buttons = [
-                [Button.inline("Previous", data="animeprev"), Button.inline("Next", data="animenext")],
-                [Button.url("Open in MAL", anime_results_list[0]['url'])],
-                [Button.url("Watch Trailer", anime_results_list[0]['trailer'])]
+                [types.InlineKeyboardButton("Previous", callback_data="animeprev"), types.InlineKeyboardButton("Next", callback_data="animenext")],
+                [types.InlineKeyboardButton("Open in MAL", url=anime_results_list[0]['url'])],
+                [types.InlineKeyboardButton("Watch Trailer", url=anime_results_list[0]['trailer'])]
             ]
         caption = (
             f"__**{1}/{len(anime_results_list)}**__\n"
@@ -90,11 +91,11 @@ async def anime_command(event):
             f"**🏢 Studio:** {anime_results_list[0]['studios']}\n"
             f"**🧬 Source:** {anime_results_list[0]['source']}"
         )
-        sent_msg = await event.client.send_file(
+        sent_msg = await client.send_photo(
             chat.id,
             anime_results_list[0]['image_url'],
             caption=caption,
-            buttons=buttons
+            reply_markup=types.InlineKeyboardMarkup(buttons)
         )
         async with aiosqlite.connect("db/database.db") as connection:
             async with connection.cursor() as cursor:
@@ -107,19 +108,19 @@ async def anime_command(event):
                 )
                 await connection.commit()
     except Exception as e:
-        await event.reply(f"Error displaying results: {str(e)}")
+        await message.reply(f"Error displaying results: {str(e)}")
 
 # ---------------------------
 # Manga Command Handler
 # ---------------------------
-async def manga_command(event):
-    chat = await event.get_chat()
+async def manga_command(client: Client, message: types.Message):
+    chat = message.chat
     await save_usage(chat, "manga")
     
-    text = event.message.message
+    text = message.text
     query = text.replace("/manga", "").replace(f"@{BOT_USERNAME}", "").strip()
     if not query:
-        await event.reply("Please provide a search query.")
+        await message.reply("Please provide a search query.")
         return
     
     index = 0
@@ -130,7 +131,7 @@ async def manga_command(event):
                 if response.status == 200:
                     results = await response.json()
                 else:
-                    await event.reply(f"API Error: Status {response.status}")
+                    await message.reply(f"API Error: Status {response.status}")
                     return
         
         for result in results.get('data', []):
@@ -158,17 +159,17 @@ async def manga_command(event):
             if index == 10:
                 break
     except Exception as e:
-        await event.reply(f"Error fetching data: {str(e)}")
+        await message.reply(f"Error fetching data: {str(e)}")
         return
 
     if index == 0:
-        await event.reply("No results found.")
+        await message.reply("No results found.")
         return
 
     try:
         buttons = [
-            [Button.inline("Previous", data="mangaprev"), Button.inline("Next", data="manganext")],
-            [Button.url("Open in MAL", manga_results_list[0]['url'])]
+            [types.InlineKeyboardButton("Previous", callback_data="mangaprev"), types.InlineKeyboardButton("Next", callback_data="manganext")],
+            [types.InlineKeyboardButton("Open in MAL", url=manga_results_list[0]['url'])]
         ]
         
         caption = (
@@ -181,11 +182,11 @@ async def manga_command(event):
             f"**🎆 Themes:** {manga_results_list[0]['themes']}\n"
             f"**🎞️ Genres:** {manga_results_list[0]['genres']}"
         )
-        sent_msg = await event.client.send_file(
+        sent_msg = await client.send_photo(
             chat.id,
             manga_results_list[0]['image_url'],
             caption=caption,
-            buttons=buttons
+            reply_markup=types.InlineKeyboardMarkup(buttons)
         )
         async with aiosqlite.connect("db/database.db") as connection:
             async with connection.cursor() as cursor:
@@ -198,19 +199,19 @@ async def manga_command(event):
                 )
                 await connection.commit()
     except Exception as e:
-        await event.reply(f"Error displaying results: {str(e)}")
+        await message.reply(f"Error displaying results: {str(e)}")
 
 # ---------------------------
 # Character Command Handler
 # ---------------------------
-async def character_command(event):
-    chat = await event.get_chat()
+async def character_command(client: Client, message: types.Message):
+    chat = message.chat
     await save_usage(chat, "character")
     
     # Remove command from text and get query
-    parts = event.message.message.split()
+    parts = message.text.split()
     if len(parts) < 2:
-        await event.reply("Please provide a search query.")
+        await message.reply("Please provide a search query.")
         return
     query = " ".join(parts[1:])
     
@@ -222,7 +223,7 @@ async def character_command(event):
                 if response.status == 200:
                     results = await response.json()
                 else:
-                    await event.reply(f"API Error: Status {response.status}")
+                    await message.reply(f"API Error: Status {response.status}")
                     return
                 
             for result in results.get('data', []):
@@ -240,16 +241,16 @@ async def character_command(event):
                 if index == 10:
                     break
         except Exception as e:
-            await event.reply(f"Error fetching data: {str(e)}")
+            await message.reply(f"Error fetching data: {str(e)}")
             return
 
     if index == 0:
-        await event.reply("No results found.")
+        await message.reply("No results found.")
         return
 
     try:
-        buttons = [[Button.url("Open in MAL", character_results_list[0]['url'])]]
-        msg = await event.client.send_file(
+        buttons = [[types.InlineKeyboardButton("Open in MAL", url=character_results_list[0]['url'])]]
+        msg = await client.send_photo(
             chat.id,
             character_results_list[0]['image_url'],
             caption=(
@@ -257,7 +258,7 @@ async def character_command(event):
                 f"**⭐ Favorites:** {character_results_list[0]['favorites']}\n"
                 f"**👓 About:** {character_results_list[0]['about']}"
             ),
-            buttons=buttons
+            reply_markup=types.InlineKeyboardMarkup(buttons)
         )
 
         async with aiosqlite.connect("db/database.db") as connection:
@@ -271,13 +272,13 @@ async def character_command(event):
                 )
                 await connection.commit()
     except Exception as e:
-        await event.reply(f"Error displaying results: {str(e)}")
+        await message.reply(f"Error displaying results: {str(e)}")
 
 # ---------------------------
 # AGHPB Command Handler
 # ---------------------------
-async def aghpb_command(event):
-    chat = await event.get_chat()
+async def aghpb_command(client: Client, message: types.Message):
+    chat = message.chat
     await save_usage(chat, "aghpb")
     
     url = "https://api.devgoldy.xyz/aghpb/v1/random"
@@ -288,8 +289,8 @@ async def aghpb_command(event):
                     image_bytes = await response.read()
                     image_file = io.BytesIO(image_bytes)
                     image_file.name = "aghpb.jpg"  # Add a filename
-                    await event.reply(file=image_file)
+                    await message.reply_photo(photo=image_file)
                 else:
-                    await event.reply(f"API Error: Status {response.status}")
+                    await message.reply(f"API Error: Status {response.status}")
     except Exception as e:
-        await event.reply(f"Error fetching image: {str(e)}")
+        await message.reply(f"Error fetching image: {str(e)}")

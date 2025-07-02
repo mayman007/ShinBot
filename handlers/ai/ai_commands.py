@@ -2,19 +2,20 @@ import asyncio
 import google.generativeai as genai
 import aiohttp
 import io
+from pyrogram import Client, types
 from config import BOT_USERNAME, GEMINI_API_KEY, HUGGINGFACE_TOKEN
 from utils.usage import save_usage
 
 # ---------------------------
 # Gemini Command Handler
 # ---------------------------
-async def gemini_command(event):
-    chat = await event.get_chat()
+async def gemini_command(client: Client, message: types.Message):
+    chat = message.chat
     await save_usage(chat, "gemini")
     try:
-        prompt = event.message.message.replace("/gemini", "").replace(f"@{BOT_USERNAME}", "").strip()
+        prompt = message.text.replace("/gemini", "").replace(f"@{BOT_USERNAME}", "").strip()
         if prompt == "":
-            await event.reply("Please write your prompt on the same message.")
+            await message.reply("Please write your prompt on the same message.")
             return
         api_key = GEMINI_API_KEY
         genai.configure(api_key=api_key)
@@ -25,27 +26,27 @@ async def gemini_command(event):
         if len(response_text) > limit:
             parts = [response_text[i: i + limit] for i in range(0, len(response_text), limit)]
             for part in parts:
-                await event.reply(f"Gemini Pro: {part}")
+                await message.reply(f"Gemini Pro: {part}")
                 await asyncio.sleep(0.5)
         else:
-            await event.reply(f"Gemini Pro: {response_text}")
+            await message.reply(f"Gemini Pro: {response_text}")
     except Exception as e:
         print(f"Gemini error: {e}")
-        await event.reply("Sorry, an unexpected error had occured.")
+        await message.reply("Sorry, an unexpected error had occured.")
 
 # ---------------------------
 # Imagine Command Handler
 # ---------------------------
-async def imagine_command(event):
-    chat = await event.get_chat()
+async def imagine_command(client: Client, message: types.Message):
+    chat = message.chat
     await save_usage(chat, "imagine")
     try:
-        something_to_imagine = event.message.message.replace("/imagine", "").replace(f"@{BOT_USERNAME}", "").strip()
+        something_to_imagine = message.text.replace("/imagine", "").replace(f"@{BOT_USERNAME}", "").strip()
         if not something_to_imagine:
-            await event.reply("You have to describe the image.")
+            await message.reply("You have to describe the image.")
             return
 
-        waiting_msg = await event.reply("Wait a moment...")
+        waiting_msg = await message.reply("Wait a moment...")
         API_URL = "https://api-inference.huggingface.co/models/prompthero/openjourney"
         API_TOKEN = HUGGINGFACE_TOKEN
         headers = {"Authorization": f"Bearer {API_TOKEN}"}
@@ -55,7 +56,7 @@ async def imagine_command(event):
                 image_bytes = await response.read()
         file = io.BytesIO(image_bytes)
         file.name = "image.png"
-        await event.client.send_file(chat.id, file)
+        await client.send_photo(chat.id, file)
         await waiting_msg.delete()
     except Exception:
-        await event.reply("Sorry, I ran into an error.")
+        await message.reply("Sorry, I ran into an error.")

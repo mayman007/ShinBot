@@ -1,13 +1,12 @@
 import aiosqlite
-from telethon.tl.types import Chat, Channel, User
+from pyrogram.types import Chat, User
 
 async def save_usage(chat_object, command_name: str):
     # Check for groups/supergroups:
-    if isinstance(chat_object, Chat) or (isinstance(chat_object, Channel) and getattr(chat_object, 'megagroup', False)):
+    if isinstance(chat_object, Chat):
         chat_id = str(chat_object.id)
         chat_name = str(chat_object.title)
-        # Telethon objects don't have a 'type' attribute, so we set it manually:
-        chat_type = "group" if isinstance(chat_object, Chat) else "supergroup"
+        chat_type = str(chat_object.type.name).lower()
         chat_members = "idk"
         chat_invite = "idk"
     # Check for private chats:
@@ -20,7 +19,7 @@ async def save_usage(chat_object, command_name: str):
         chat_invite = "_"
     else:
         # Fallback for any other type
-        chat_id = str(chat_object.id)
+        chat_id = str(getattr(chat_object, 'id', 'Unknown'))
         chat_name = "Unknown"
         chat_type = "Unknown"
         chat_members = "_"
@@ -43,4 +42,5 @@ async def save_usage(chat_object, command_name: str):
                     f"UPDATE {command_name} SET usage = ? WHERE id = ?",
                     (row[2] + 1, chat_id)
                 )
+            await connection.commit()
             await connection.commit()

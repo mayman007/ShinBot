@@ -9,7 +9,10 @@ import random
 import socket
 import http.client
 from io import BytesIO
-from telethon import TelegramClient, events, Button, errors
+from pyrogram import Client, filters, types
+from pyrogram.handlers import MessageHandler, CallbackQueryHandler
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from pyrogram.errors import FloodWait
 from typing import Dict, List, Optional, Any, Tuple
 
 from utils.usage import save_usage
@@ -146,13 +149,13 @@ class ProgressTracker:
                 )
             
             try:
-                await self.client.edit_message(self.chat_id, self.message_id, msg)
+                await self.client.edit_message_text(self.chat_id, self.message_id, msg)
                 self.last_update_time = current_time
                 return True
-            except errors.FloodWaitError as e:
+            except FloodWait as e:
                 # Handle rate limiting
-                self.flood_wait_until = current_time + e.seconds
-                logger.info(f"Progress update rate limited for {e.seconds}s")
+                self.flood_wait_until = current_time + e.x
+                logger.info(f"Progress update rate limited for {e.x}s")
                 return False
             except Exception as e:
                 logger.error(f"Failed to update progress: {e}")
@@ -717,7 +720,7 @@ async def download_audio_by_format(url: str, audio_format_id: str, quality_str: 
                                 progress_state["eta"]
                             )
                             last_percent = current_percent
-            except errors.FloodWaitError as e:
+            except FloodWait as e:
                 # More aggressive backoff for flood wait
                 logger.warning(f"Flood wait encountered during progress update: {e.seconds}s")
                 retry_interval = min(e.seconds * 1.5, 30.0)  # More aggressive backoff
@@ -876,44 +879,62 @@ async def upload_file_with_progress(client, chat_id, message_id, file_path, capt
             await tracker.update_progress(current, total, speed, remaining)
     
     try:
-        # Upload the file with progress tracking
-        await client.send_file(
-            chat_id,
-            file=file_path,
-            caption=caption,
-            reply_to=reply_to,
-            supports_streaming=True if file_path.endswith('.mp4') else None,
-            progress_callback=progress_callback
-        )
+        # Determine file type and use appropriate sender
+        if file_path.endswith('.mp4'):
+            await client.send_video(
+                chat_id,
+                video=file_path,
+                caption=caption,
+                reply_to_message_id=reply_to,
+                supports_streaming=True,
+                progress=progress_callback
+            )
+        elif file_path.endswith('.mp3'):
+            await client.send_audio(
+                chat_id,
+                audio=file_path,
+                caption=caption,
+                reply_to_message_id=reply_to,
+                progress=progress_callback
+            )
+        else:
+            await client.send_document(
+                chat_id,
+                document=file_path,
+                caption=caption,
+                reply_to_message_id=reply_to,
+                progress=progress_callback
+            )
+        # Delete the status message after successful upload
+        await client.delete_messages(chat_id, message_id)
     except Exception as e:
-        await client.edit_message(
+        await client.edit_message_text(
             chat_id, 
             message_id, 
             f"Error during upload: {str(e)}"
         )
         raise e
 
-# Command handlers for Telethon
+# Command handlers for Pyrogram
 
-@events.register(events.NewMessage(pattern=r'/yt'))
-async def yt_command(event):
+async def yt_command(client: Client, message: types.Message):
     """Handle /yt command for downloading YouTube videos."""
-    chat = await event.get_chat()
+    chat = message.chat
     await save_usage(chat, "yt")
     
     # Get the user ID of the sender
-    user_id = event.sender_id
+    user_id = message.from_user.id
     
     # Check if the user already has an active download
     if user_id in active_downloads:
-        await event.reply(f"⚠️ You already have an active download in progress:\n\n{active_downloads[user_id]}\n\nPlease wait for it to complete before starting a new one.")
+        await message.reply(f"⚠️ You already have an active download in progress:\n\n{active_downloads[user_id]}\n\nPlease wait for it to complete before starting a new one.")
         return
         
-    message_text = event.message.message
+    message_text = message.text
     args = message_text.split()[1:]  # Skip the command itself
     
     if not args:
-        await event.reply("Usage: /yt <video URL> [subs]")
+        await message.reply("Usage: /yt [video url] + (subs lang code if wanted)")
         return
 
     # Parse arguments
@@ -925,12 +946,12 @@ async def yt_command(event):
             break
 
     if not video_url:
-        await event.reply("No valid video URL provided.")
+        await message.reply("No valid video URL provided.")
         return
 
     # Check if subtitle info is requested
     if (subs_requested):
-        status_msg = await event.reply("Fetching subtitle info, please wait...")
+        status_msg = await message.reply("Fetching subtitle info, please wait...")
         try:
             info = await extract_info(video_url)
             safe_title = sanitize_filename(info.get("title", "subtitle"))
@@ -965,85 +986,84 @@ async def yt_command(event):
             # Create buttons for each subtitle language
             buttons = []
             for lang in sorted(subs_data.keys()):
-                buttons.append([Button.inline(lang, data=f"subs_{lang}")])
+                buttons.append([InlineKeyboardButton(lang, callback_data=f"subs_{lang}")])
                 
             # Store subtitle data in user_data
-            if not hasattr(event.client, 'user_data'):
-                event.client.user_data = {}
+            if not hasattr(client, 'user_data'):
+                client.user_data = {}
                 
-            event.client.user_data[f"subs_data_{event.chat_id}_{event.sender_id}"] = {
+            client.user_data[f"subs_data_{message.chat.id}_{message.from_user.id}"] = {
                 'video_url': video_url,
                 'safe_title': safe_title,
-                'original_msg_id': event.message.id,  # Store original message ID
+                'original_msg_id': message.id,  # Store original message ID
             }
             
-            await status_msg.edit("Choose subtitle language:", buttons=buttons)
+            await status_msg.edit("Choose subtitle language:", reply_markup=InlineKeyboardMarkup(buttons))
             
         except Exception as e:
             await status_msg.edit(f"Error fetching subtitle info: {str(e)}")
         return
 
     # Handle video/audio download
-    status_msg = await event.reply("Fetching video info, please wait...")
+    status_msg = await message.reply("Fetching video info, please wait...")
     
     try:
         # Get video format options
         info, video_options, best_audio = await list_video_options(video_url)
         
         # Initialize user_data if not already available
-        if not hasattr(event.client, 'user_data'):
-            event.client.user_data = {}
+        if not hasattr(client, 'user_data'):
+            client.user_data = {}
             
         # Store data for callback
-        user_data_key = f"yt_data_{event.chat_id}_{event.sender_id}"
-        event.client.user_data[user_data_key] = {
+        user_data_key = f"yt_data_{message.chat.id}_{message.from_user.id}"
+        client.user_data[user_data_key] = {
             'video_url': video_url,
             'options': video_options,
             'best_audio': best_audio,
             'message_id': status_msg.id,
-            'original_msg_id': event.message.id,  # Store original message ID
+            'original_msg_id': message.id,  # Store original message ID
         }
         
         # Create buttons for video options
         buttons = []
-        buttons.append([Button.inline("🎥 Video Options:", data="ignore")])
+        buttons.append([InlineKeyboardButton("🎥 Video Options:", callback_data="ignore")])
         for i, option in enumerate(video_options):
             resolution = option['resolution']
             stream_type = option['stream_type']
             size = option['total_size']
             size_str = f"{size/(1024*1024):.1f} MB" if size else "N/A"
             button_text = f"{resolution} ({stream_type}, {size_str})"
-            buttons.append([Button.inline(button_text, data=f"yt_{i}")])
+            buttons.append([InlineKeyboardButton(button_text, callback_data=f"yt_{i}")])
         
         # Get audio options
         audio_options = await list_audio_options(video_url)
         if audio_options:
-            buttons.append([Button.inline("🎵 Audio Options:", data="ignore")])
+            buttons.append([InlineKeyboardButton("🎵 Audio Options:", callback_data="ignore")])
             for i, option in enumerate(audio_options):
                 abr = option["abr"]
                 size = option["filesize"]
                 size_str = f"{size/(1024*1024):.1f} MB"
                 button_text = f"{abr} kbps ({size_str})"
-                buttons.append([Button.inline(button_text, data=f"yt_audio_{i}")])
+                buttons.append([InlineKeyboardButton(button_text, callback_data=f"yt_audio_{i}")])
                 
             # Store audio options
-            event.client.user_data[f"yt_audio_{event.chat_id}_{event.sender_id}"] = audio_options
+            client.user_data[f"yt_audio_{message.chat.id}_{message.from_user.id}"] = audio_options
         
         video_title = info.get('title', 'Video')
-        await status_msg.edit(f"Choose quality for: {video_title}", buttons=buttons)
+        await status_msg.edit(f"Choose quality for: {video_title}", reply_markup=InlineKeyboardMarkup(buttons))
         
     except Exception as e:
         await status_msg.edit(f"Error: {str(e)}")
 
-@events.register(events.CallbackQuery(pattern=r'yt_\d+$'))
-async def yt_quality_button(event):
+async def yt_quality_button(client: Client, callback_query):
     """Handle video quality selection callback."""
     try:
-        await event.answer()  # Acknowledge callback
+        await callback_query.answer()  # Acknowledge callback
         
         # Extract index from callback data and get user ID
-        index = int(event.data.decode().split("_")[1])
-        user_id = event.sender_id  # Get the actual user ID of the sender
+        index = int(callback_query.data.split("_")[1])
+        user_id = callback_query.from_user.id  # Get the actual user ID of the sender
         
         # Get or create a lock for this user
         if user_id not in download_locks:
@@ -1053,18 +1073,18 @@ async def yt_quality_button(event):
         async with download_locks[user_id]:
             # Check if user already has an active download
             if user_id in active_downloads:
-                await event.edit(f"⚠️ You already have an active download in progress:\n\n{active_downloads[user_id]}\n\nPlease wait for it to complete.")
+                await callback_query.message.edit(f"⚠️ You already have an active download in progress:\n\n{active_downloads[user_id]}\n\nPlease wait for it to complete.")
                 return
             
             # Immediately update the message to inform the user we're working
-            await event.edit("🔍 Preparing download... fetching video details")
+            await callback_query.message.edit("🔍 Preparing download... fetching video details")
             
             # Get user data
-            user_data_key = f"yt_data_{event.chat_id}_{event.sender_id}"
-            yt_data = getattr(event.client, 'user_data', {}).get(user_data_key)
+            user_data_key = f"yt_data_{callback_query.message.chat.id}_{callback_query.from_user.id}"
+            yt_data = getattr(client, 'user_data', {}).get(user_data_key)
             
             if not yt_data:
-                await event.edit("Session expired. Please use /yt command again.")
+                await callback_query.message.edit("Session expired. Please use /yt command again.")
                 return
             
             video_url = yt_data['video_url']
@@ -1072,7 +1092,7 @@ async def yt_quality_button(event):
             best_audio = yt_data['best_audio']
             
             if index < 0 or index >= len(options):
-                await event.edit("Invalid selection.")
+                await callback_query.message.edit("Invalid selection.")
                 return
             
             selected = options[index]
@@ -1081,7 +1101,7 @@ async def yt_quality_button(event):
             stream_type = selected['stream_type']
             
             # Update message with more details as we make progress
-            await event.edit(f"⏳ Fetching video metadata for {resolution} download...")
+            await callback_query.message.edit(f"⏳ Fetching video metadata for {resolution} download...")
             
             # Get info and mark this user as having an active download
             try:
@@ -1089,11 +1109,11 @@ async def yt_quality_button(event):
                 video_title = info.get('title', 'Unknown video')
                 active_downloads[user_id] = f"{video_title} [{resolution}]"
             except Exception as e:
-                await event.edit(f"❌ Error fetching video information: {str(e)}")
+                await callback_query.message.edit(f"❌ Error fetching video information: {str(e)}")
                 return
             
             # Update message to show initialization state
-            await event.edit(f"⚙️ Initializing download for {resolution} quality...\n{video_title}")
+            await callback_query.message.edit(f"⚙️ Initializing download for {resolution} quality...\n{video_title}")
             
             try:
                 # Download the video with progress updates and pass the user_id
@@ -1103,9 +1123,9 @@ async def yt_quality_button(event):
                     best_audio, 
                     stream_type, 
                     resolution,
-                    event.client,
-                    event.chat_id,
-                    event.message_id,
+                    client,
+                    callback_query.message.chat.id,
+                    callback_query.message.id,
                     user_id  # Pass the real user ID
                 )
                 
@@ -1113,18 +1133,18 @@ async def yt_quality_button(event):
                 if os.path.exists(filename):  # Add existence check
                     file_size = os.path.getsize(filename)
                     if file_size > MAX_FILESIZE:
-                        await event.edit(f"Error: File size ({file_size/(1024*1024):.1f} MB) exceeds Telegram's limit of 2 GB.")
+                        await callback_query.message.edit(f"Error: File size ({file_size/(1024*1024):.1f} MB) exceeds Telegram's limit of 2 GB.")
                         safe_delete(filename)
                         return
                 else:
-                    await event.edit("Error: Downloaded file not found.")
+                    await callback_query.message.edit("Error: Downloaded file not found.")
                     return
                 
                 # Upload the file with progress tracking
                 await upload_file_with_progress(
-                    event.client,
-                    event.chat_id,
-                    event.message_id,
+                    client,
+                    callback_query.message.chat.id,
+                    callback_query.message.id,
                     filename,
                     f"{safe_title} [{resolution}]",
                     yt_data.get('original_msg_id')
@@ -1132,10 +1152,9 @@ async def yt_quality_button(event):
                 
                 # Clean up the file and button
                 safe_delete(filename)
-                await event.delete()
                 
             except Exception as e:
-                await event.edit(f"Error: {str(e)}")
+                await callback_query.message.edit(f"Error: {str(e)}")
                 # Clean up any partially downloaded files
                 try:
                     pattern = os.path.join(DOWNLOADS_DIR, f"*{resolution}*")
@@ -1152,17 +1171,16 @@ async def yt_quality_button(event):
         # Make sure to remove from active downloads even if there's an error
         if 'user_id' in locals() and user_id in active_downloads:
             del active_downloads[user_id]
-        await event.edit(f"An unexpected error occurred: {str(e)}")
+        await callback_query.message.edit(f"An unexpected error occurred: {str(e)}")
 
-@events.register(events.CallbackQuery(pattern=r'yt_audio_\d+$'))
-async def yt_audio_button(event):
+async def yt_audio_button(client: Client, callback_query):
     """Handle audio quality selection callback."""
     try:
-        await event.answer()  # Acknowledge callback
+        await callback_query.answer()  # Acknowledge callback
         
         # Extract index from callback data and get user ID
-        index = int(event.data.decode().split("_")[2])
-        user_id = event.sender_id
+        index = int(callback_query.data.split("_")[2])
+        user_id = callback_query.from_user.id
         
         # Get or create a lock for this user
         if user_id not in download_locks:
@@ -1172,30 +1190,30 @@ async def yt_audio_button(event):
         async with download_locks[user_id]:
             # Check if user already has an active download
             if user_id in active_downloads:
-                await event.edit(f"⚠️ You already have an active download in progress:\n\n{active_downloads[user_id]}\n\nPlease wait for it to complete.")
+                await callback_query.message.edit(f"⚠️ You already have an active download in progress:\n\n{active_downloads[user_id]}\n\nPlease wait for it to complete.")
                 return
             
             # Immediately notify user we're working
-            await event.edit("🔍 Preparing audio download...")
+            await callback_query.message.edit("🔍 Preparing audio download...")
             
             # Get audio options from user data
-            audio_key = f"yt_audio_{event.chat_id}_{event.sender_id}"
-            audio_options = getattr(event.client, 'user_data', {}).get(audio_key)
+            audio_key = f"yt_audio_{callback_query.message.chat.id}_{callback_query.from_user.id}"
+            audio_options = getattr(client, 'user_data', {}).get(audio_key)
             
             if not audio_options or index < 0 or index >= len(audio_options):
-                await event.edit("Session expired or invalid selection. Please use /yt command again.")
+                await callback_query.message.edit("Session expired or invalid selection. Please use /yt command again.")
                 return
             
             selected = audio_options[index]
             
             # Get the video URL from the main data
-            data_key = f"yt_data_{event.chat_id}_{event.sender_id}"
-            main_data = getattr(event.client, 'user_data', {}).get(data_key, {})
+            data_key = f"yt_data_{callback_query.message.chat.id}_{callback_query.from_user.id}"
+            main_data = getattr(client, 'user_data', {}).get(data_key, {})
             video_url = main_data.get("video_url")
             original_msg_id = main_data.get("original_msg_id")  # Get original message ID
             
             if not video_url:
-                await event.edit("Session expired. Please use /yt command again.")
+                await callback_query.message.edit("Session expired. Please use /yt command again.")
                 return
             
             # Mark this user as having an active download
@@ -1207,7 +1225,7 @@ async def yt_audio_button(event):
             quality_str = f"{selected['abr']}kbps"
             
             # Update message to show initialization state
-            await event.edit(f"⚙️ Initializing audio download: {selected['abr']} kbps\n{audio_title}")
+            await callback_query.message.edit(f"⚙️ Initializing audio download: {selected['abr']} kbps\n{audio_title}")
             
             try:
                 # Download the audio with progress updates and pass the user_id
@@ -1215,29 +1233,29 @@ async def yt_audio_button(event):
                     video_url, 
                     audio_format_id, 
                     quality_str, 
-                    event.client, 
-                    event.chat_id, 
-                    event.message_id,
+                    client, 
+                    callback_query.message.chat.id, 
+                    callback_query.message.id,
                     user_id  # Pass the real user ID
                 )
                 
                 # Check if file exists
                 if not os.path.exists(filename):
-                    await event.edit("Error: Downloaded file not found.")
+                    await callback_query.message.edit("Error: Downloaded file not found.")
                     return
                     
                 # Check file size
                 file_size = os.path.getsize(filename)
                 if file_size > MAX_FILESIZE:
-                    await event.edit(f"Error: File size ({file_size/(1024*1024):.1f} MB) exceeds Telegram's limit.")
+                    await callback_query.message.edit(f"Error: File size ({file_size/(1024*1024):.1f} MB) exceeds Telegram's limit.")
                     safe_delete(filename)
                     return
                     
                 # Upload the file with progress tracking
                 await upload_file_with_progress(
-                    event.client,
-                    event.chat_id,
-                    event.message_id,
+                    client,
+                    callback_query.message.chat.id,
+                    callback_query.message.id,
                     filename,
                     f"{safe_title} - {selected['abr']} kbps",
                     original_msg_id
@@ -1245,10 +1263,9 @@ async def yt_audio_button(event):
                 
                 # Clean up the file and button
                 safe_delete(filename)
-                await event.delete()
                 
             except Exception as e:
-                await event.edit(f"Error: {str(e)}")
+                await callback_query.message.edit(f"Error: {str(e)}")
                 # Clean up any partially downloaded files
                 pattern = os.path.join(DOWNLOADS_DIR, f"*{quality_str}*")
                 for file in glob.glob(pattern):
@@ -1262,30 +1279,29 @@ async def yt_audio_button(event):
         # Make sure to remove from active downloads even if there's an error
         if 'user_id' in locals() and user_id in active_downloads:
             del active_downloads[user_id]
-        await event.edit(f"An unexpected error occurred: {str(e)}")
+        await callback_query.message.edit(f"An unexpected error occurred: {str(e)}")
 
-@events.register(events.CallbackQuery(pattern=r'subs_'))
-async def yt_subs_callback(event):
+async def yt_subs_callback(client: Client, callback_query):
     """Handle subtitle language selection callback."""
     try:
-        await event.answer()  # Acknowledge callback
+        await callback_query.answer()  # Acknowledge callback
         
         # Extract language from callback data
-        lang = event.data.decode().split("_", 1)[1]
+        lang = callback_query.data.split("_", 1)[1]
         
         # Get user ID from the event
-        user_id = event.sender_id
+        user_id = callback_query.from_user.id
         
         # Check if user already has an active download
         # Note: We allow subtitle downloads even if a video download is happening
         # since they are relatively small and quick
         
         # Get subtitle data from user data
-        subs_key = f"subs_data_{event.chat_id}_{event.sender_id}"
-        subs_data = getattr(event.client, 'user_data', {}).get(subs_key)
+        subs_key = f"subs_data_{callback_query.message.chat.id}_{callback_query.from_user.id}"
+        subs_data = getattr(client, 'user_data', {}).get(subs_key)
         
         if not subs_data:
-            await event.edit("Session expired. Please use /yt command with subs again.")
+            await callback_query.message.edit("Session expired. Please use /yt command with subs again.")
             return
         
         video_url = subs_data['video_url']
@@ -1293,23 +1309,23 @@ async def yt_subs_callback(event):
         original_msg_id = subs_data.get('original_msg_id')
         
         # Update message to show download progress
-        await event.edit(f"Downloading subtitles for language: {lang}...")
+        await callback_query.message.edit(f"Downloading subtitles for language: {lang}...")
         
         try:
             # Get user ID from the event
-            user_id = event.sender_id
+            user_id = callback_query.from_user.id
             
             # Download subtitles with user ID
             filename = await download_subtitles(video_url, lang, safe_title, user_id)
             
             if not filename or not os.path.exists(filename):
-                await event.edit(f"Error: Subtitles for {lang} not available or could not be downloaded.")
+                await callback_query.message.edit(f"Error: Subtitles for {lang} not available or could not be downloaded.")
                 return
             
             # Check file size
             file_size = os.path.getsize(filename)
             if file_size == 0:
-                await event.edit(f"Error: Downloaded subtitle file is empty.")
+                await callback_query.message.edit(f"Error: Downloaded subtitle file is empty.")
                 safe_delete(filename)
                 return
             
@@ -1322,35 +1338,33 @@ async def yt_subs_callback(event):
             bio.name = os.path.basename(filename)
             
             # Send the file as reply to original message
-            await event.client.send_file(
-                entity=event.chat_id,
-                file=bio,
+            await client.send_document(
+                chat_id=callback_query.message.chat.id,
+                document=bio,
                 caption=f"Subtitles ({lang}) for {safe_title}",
-                reply_to=original_msg_id,  # Reply to original command message
+                reply_to_message_id=original_msg_id,  # Reply to original command message
             )
             
             # Clean up the file and button
             safe_delete(filename)
-            await event.delete()
+            await callback_query.message.delete()
             
         except Exception as e:
-            await event.edit(f"Error: {str(e)}")
+            await callback_query.message.edit(f"Error: {str(e)}")
             
     except Exception as e:
-        await event.edit(f"An unexpected error occurred: {str(e)}")
+        await callback_query.message.edit(f"An unexpected error occurred: {str(e)}")
 
-@events.register(events.CallbackQuery(pattern=r'ignore'))
-async def ignore_callback(event):
+async def ignore_callback(client: Client, callback_query):
     """Handle ignore callback for header buttons."""
-    await event.answer("This is just a header, not a button.")
+    await callback_query.answer("This is just a header, not a button.")
 
 # Update main function to cleanup old downloads regularly
-@events.register(events.NewMessage(pattern=r'/cleanup_downloads'))
-async def cleanup_downloads(event):
+async def cleanup_downloads(client: Client, message: types.Message):
     """Admin command to clean up old downloads."""
     # Only allow admins or the bot owner to use this command
-    if not await is_admin_or_owner(event.client, event.sender_id):
-        await event.reply("You don't have permission to use this command.")
+    if not await is_admin_or_owner(client, message.from_user.id):
+        await message.reply("You don't have permission to use this command.")
         return
     
     try:
@@ -1371,11 +1385,11 @@ async def cleanup_downloads(event):
                         os.remove(file_path)
                         deleted_count += 1
         
-        await event.reply(f"Cleanup complete. Deleted {deleted_count} old files.")
+        await message.reply(f"Cleanup complete. Deleted {deleted_count} old files.")
     except Exception as e:
-        await event.reply(f"Error during cleanup: {str(e)}")
+        await message.reply(f"Error during cleanup: {str(e)}")
 
-async def is_admin_or_owner(client, user_id):
+async def is_admin_or_owner(client: Client, user_id):
     """Check if user is an admin or the bot owner."""
     # You can define a list of admin IDs in config.py
     try:
@@ -1389,19 +1403,9 @@ async def is_admin_or_owner(client, user_id):
     return False
 
 # Function to register all handlers
-def register_yt_handlers(client: TelegramClient):
-    """Register all YouTube download handlers with the Telethon client."""
-    client.add_event_handler(yt_command)
-    client.add_event_handler(yt_quality_button)
-    client.add_event_handler(yt_audio_button)
-    client.add_event_handler(yt_subs_callback)
-    client.add_event_handler(ignore_callback)
-    client.add_event_handler(cleanup_downloads)
-    
-    # Initialize user_data if not already available
-    if not hasattr(client, 'user_data'):
-        client.user_data = {}
-    
-    # Reset the active_downloads dictionary on startup
-    global active_downloads
-    active_downloads = {}
+def register_yt_handlers(client: Client):
+    """Register all YouTube download handlers with the Pyrogram client."""
+    client.add_handler(MessageHandler(yt_command, filters.command("yt")))
+    client.add_handler(CallbackQueryHandler(yt_quality_button, filters.regex(r'yt_\d+$')))
+    client.add_handler(CallbackQueryHandler(yt_audio_button, filters.regex(r'yt_audio_\d+$')))
+    client.add_handler(CallbackQueryHandler(yt_subs_callback, filters.regex(r'subs_')))

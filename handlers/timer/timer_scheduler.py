@@ -26,7 +26,8 @@ async def init_timer_db():
 
 async def get_chat_timer_table(connection, chat_id):
     """Get or create a chat-specific timer table."""
-    table_name = f"timer_{chat_id}"
+    # Sanitize chat_id for table name - handle negative IDs
+    table_name = f"timer_{str(chat_id).replace("-", "")}"
     
     async with connection.cursor() as cursor:
         # Add chat to master table if not exists
@@ -81,7 +82,7 @@ async def check_pending_timers(client):
                         end_message = "Your timer has ended."
                         if reason:
                             end_message += f" Reason: {reason}"
-                        await client.send_message(chat_id, end_message, reply_to=message_id)
+                        await client.send_message(chat_id, end_message, reply_to_message_id=message_id)
                         
                         # Update the timer status to 'ended'
                         await cursor.execute(f"UPDATE {table_name} SET status = 'ended' WHERE id = ?", (timer_id,))
@@ -122,9 +123,9 @@ async def schedule_timer(client, chat_id, timer_id, delay, reason, message_id=No
                         end_message += f"\nReason: **{reason}**"
                     
                     if message_id:
-                        await client.send_message(chat_id, end_message, reply_to=message_id, parse_mode="Markdown")
+                        await client.send_message(chat_id, end_message, reply_to_message_id=message_id)
                     else:
-                        await client.send_message(chat_id, end_message, parse_mode="Markdown")
+                        await client.send_message(chat_id, end_message)
                     
                     # Update the timer status to 'ended'
                     await cursor.execute(
