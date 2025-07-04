@@ -29,6 +29,7 @@ async def help_command(client: Client, message: types.Message):
         "/aghpb - Anime girl holding programming book\n"
         "/anime - Search Anime\n"
         "/character - Search Anime & Manga characters\n"
+        "/chatid - Get the current chat ID\n"
         "/choose - Make me choose for you\n"
         "/coinflip - Flip a coin\n"
         "/dadjoke - Get a random dad joke\n"
@@ -186,4 +187,12 @@ async def ping_command(client: Client, message: types.Message):
         )
     except Exception as e:
         await message.reply(f"Error measuring latency: {str(e)}")
+
+# ---------------------------
+# Chat ID command
+# ---------------------------
+async def chatid_command(client: Client, message: types.Message):
+    chat = message.chat
+    await save_usage(chat, "chatid")
+    await message.reply(f"Chat ID: `{chat.id}`")
 

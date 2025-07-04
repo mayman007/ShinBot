@@ -19,6 +19,7 @@ def register_handlers(client: Client):
     client.add_handler(MessageHandler(handlers.aghpb_command, filters.command("aghpb")))
     client.add_handler(MessageHandler(handlers.echo_command, filters.command("echo")))
     client.add_handler(MessageHandler(handlers.ping_command, filters.command("ping")))
+    client.add_handler(MessageHandler(handlers.chatid_command, filters.command("chatid")))
     client.add_handler(MessageHandler(handlers.timer_command, filters.command("timer")))
     client.add_handler(MessageHandler(handlers.list_timers_command, filters.command("timerslist")))
     client.add_handler(MessageHandler(handlers.remove_timer_command, filters.command("timerdel")))
@@ -26,17 +27,14 @@ def register_handlers(client: Client):
     client.add_handler(MessageHandler(handlers.slot_command, filters.command("slot")))
     client.add_handler(MessageHandler(handlers.coinflip_command, filters.command("coinflip")))
     client.add_handler(MessageHandler(handlers.choose_command, filters.command("choose")))
-    if ENABLE_MEME_COMMAND:
-        client.add_handler(MessageHandler(handlers.meme_command, filters.command("meme")))
     client.add_handler(MessageHandler(handlers.geekjoke_command, filters.command("geekjoke")))
     client.add_handler(MessageHandler(handlers.dadjoke_command, filters.command("dadjoke")))
     client.add_handler(MessageHandler(handlers.dog_command, filters.command("dog")))
     client.add_handler(MessageHandler(handlers.affirmation_command, filters.command("affirmation")))
     client.add_handler(MessageHandler(handlers.advice_command, filters.command("advice")))
-    if ENABLE_GEMINI_COMMAND:
-        client.add_handler(MessageHandler(handlers.gemini_command, filters.command("gemini")))
-    if ENABLE_IMAGINE_COMMAND:
-        client.add_handler(MessageHandler(handlers.imagine_command, filters.command("imagine")))
+    if ENABLE_MEME_COMMAND: client.add_handler(MessageHandler(handlers.meme_command, filters.command("meme")))
+    if ENABLE_GEMINI_COMMAND: client.add_handler(MessageHandler(handlers.gemini_command, filters.command("gemini")))
+    if ENABLE_IMAGINE_COMMAND: client.add_handler(MessageHandler(handlers.imagine_command, filters.command("imagine")))
 
     # YouTube command handlers
     handlers.register_yt_handlers(client)  # Use the proper registration function
