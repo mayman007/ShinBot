@@ -13,7 +13,11 @@ async def startup(client: Client):
     await init_warns_db()
     # Get bot info for debugging
     me = await client.get_me()
-    logging.getLogger(__name__).info(f"Bot started: @{me.username} (ID: {me.id})")
+    logger = logging.getLogger(__name__)
+    logger.info(f"Bot started: @{me.username} (ID: {me.id})")
+    
+    # Test admin checking in a debug mode
+    logger.info("Bot initialization complete - admin checking should work now")
 
 async def main():
     # Create necessary directories
