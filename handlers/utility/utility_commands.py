@@ -45,6 +45,8 @@ async def help_command(client: Client, message: types.Message):
         "/joindate - Get each member's join date in the group\n"
         "/manga - Search Manga\n"
         "/meme - Get a random meme from Reddit\n"
+        "/mute - Mute a user\n"
+        "/unmute - Unmute a user\n"
         "/pfp - Get user's profile picture\n"
         "/ping - Get bot's latency\n"
         "/reverse - Reverse your words\n"
@@ -53,6 +55,10 @@ async def help_command(client: Client, message: types.Message):
         "/timer - Set yourself a timer\n"
         "/timerdel - Delete a timer\n"
         "/timerslist - Get a list of timers set in this chat\n"
+        "/warn - Issue a warning to a user\n"
+        "/warndel - Delete a warning by ID\n"
+        "/warnslist - List all active warnings in chat\n"
+        "/warnsuser - View warnings for a specific user\n"
         "/yt - Download videos from YouTube and other sites\n"
     )
     await message.reply(help_text)

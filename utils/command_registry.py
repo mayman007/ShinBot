@@ -38,15 +38,21 @@ def register_handlers(client: Client):
     if ENABLE_GEMINI_COMMAND: client.add_handler(MessageHandler(handlers.gemini_command, filters.command("gemini")))
     if ENABLE_IMAGINE_COMMAND: client.add_handler(MessageHandler(handlers.imagine_command, filters.command("imagine")))
 
+    # Warn system commands
+    client.add_handler(MessageHandler(handlers.warn_command, filters.command("warn")))
+    client.add_handler(MessageHandler(handlers.warndel_command, filters.command("warndel")))
+    client.add_handler(MessageHandler(handlers.warnsuser_command, filters.command("warnsuser")))
+    client.add_handler(MessageHandler(handlers.warnslist_command, filters.command("warnslist")))
+
     # YouTube command handlers
     handlers.register_yt_handlers(client)  # Use the proper registration function
 
     # Register a handler for text messages that are not commands
     all_commands = [
         "start", "help", "mute", "unmute", "joindate", "usagedata", "character",
-        "anime", "manga", "aghpb", "echo", "ping", "timer", "timerslist",
-        "timerdel", "reverse", "slot", "coinflip", "geekjoke",
-        "dadjoke", "dog", "affirmation", "advice", "choose", "yt"
+        "anime", "manga", "aghpb", "echo", "ping", "calc", "pfp", "chatid", "timer",
+        "timerslist", "timerdel", "reverse", "slot", "coinflip", "geekjoke", "dadjoke",
+        "dog", "affirmation", "advice", "choose", "yt", "warn", "warndel", "warnsuser", "warnslist"
     ]
 
     # Add conditional commands to the list

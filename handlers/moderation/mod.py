@@ -4,14 +4,6 @@ from pyrogram import Client, types
 from pyrogram.errors import UserAdminInvalid
 from utils.usage import save_usage
 
-# ---------------------------
-# tst command
-# ---------------------------
-async def tst(client: Client, message: types.Message):
-    chat = message.chat
-    await save_usage(chat, "tst")
-    
-    print("TST command executed")
 
 # ---------------------------
 # Mute command
