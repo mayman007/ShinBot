@@ -14,7 +14,18 @@ async def ban_user(client: Client, message: Message):
     try:
         user, reason = await extract_user_and_reason(client, message)
         if not user:
-            await message.reply("❌ Please specify a user to ban.")
+            await message.reply("❌ Please specify a user to ban.\n**Usage:** `/ban @username [reason]` or reply to a message with `/ban [reason]`")
+            return
+        
+        # Check if trying to ban yourself
+        if user.id == message.from_user.id:
+            await message.reply("❌ You cannot ban yourself!")
+            return
+        
+        # Check if trying to ban the bot
+        me = await client.get_me()
+        if user.id == me.id:
+            await message.reply("❌ I cannot ban myself!")
             return
         
         # Check if user is already banned
@@ -23,13 +34,16 @@ async def ban_user(client: Client, message: Message):
             if member.status in ["kicked", "banned"]:
                 await message.reply(f"❌ {user.first_name} is already banned.")
                 return
+            
+            # Check if trying to ban an admin
+            status_str = str(member.status).lower()
+            if ('owner' in status_str or 'creator' in status_str or 
+                'administrator' in status_str or 'admin' in status_str):
+                await message.reply(f"❌ Cannot ban {user.first_name} - user is an admin.")
+                return
+                
         except UserNotParticipant:
             await message.reply(f"❌ {user.first_name} is not in this chat.")
-            return
-        
-        # Check if trying to ban an admin
-        if member.status in ["administrator", "creator"]:
-            await message.reply(f"❌ Cannot ban {user.first_name} - user is an admin.")
             return
         
         # Ban the user
@@ -58,7 +72,7 @@ async def unban_user(client: Client, message: Message):
     try:
         user, reason = await extract_user_and_reason(client, message)
         if not user:
-            await message.reply("❌ Please specify a user to unban.")
+            await message.reply("❌ Please specify a user to unban.\n**Usage:** `/unban @username [reason]` or reply to a message with `/unban [reason]`")
             return
         
         # Check if user is actually banned

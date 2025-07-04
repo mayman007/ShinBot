@@ -5,6 +5,8 @@ import logging
 from pyrogram import Client, types
 from pyrogram.errors import UserAdminInvalid
 from utils.usage import save_usage
+from utils.decorators import admin_only, check_admin_permissions
+from utils.helpers import extract_user_and_reason
 
 logger = logging.getLogger(__name__)
 
@@ -26,133 +28,10 @@ async def init_warns_db():
             await connection.commit()
             logger.info("Warns database initialized")
 
-async def check_admin_permissions(client: Client, chat_id: int, user_id: int):
-    """Check if user has admin permissions with comprehensive debugging."""
-    try:
-        # First, check if this is a private chat
-        chat = await client.get_chat(chat_id)
-        if chat.type == "private":
-            logger.info(f"Private chat detected, allowing command for user {user_id}")
-            return True
-        
-        logger.info(f"Checking admin permissions for user {user_id} in chat {chat_id} ({chat.type})")
-        
-        # Check bot's own permissions first
-        try:
-            bot_member = await client.get_chat_member(chat_id, "me")
-            logger.info(f"Bot status in chat: {bot_member.status}")
-            # Fix: Check status properly for enum values
-            status_str = str(bot_member.status).lower()
-            if not ('administrator' in status_str or 'creator' in status_str or 'owner' in status_str):
-                logger.warning("Bot is not an admin in this chat")
-        except Exception as e:
-            logger.warning(f"Could not check bot admin status: {e}")
-        
-        # Try to get user's member status
-        try:
-            member = await client.get_chat_member(chat_id, user_id)
-            logger.info(f"User {user_id} status: {member.status}")
-            
-            # Check various admin statuses - handle both string and enum values
-            status_str = str(member.status).lower()
-            if (member.status == 'creator' or 
-                member.status == 'owner' or 
-                'owner' in status_str or 
-                'creator' in status_str):
-                logger.info(f"User {user_id} is chat creator/owner")
-                return True
-            elif (member.status == 'administrator' or 
-                  'administrator' in status_str or
-                  'admin' in status_str):
-                logger.info(f"User {user_id} is administrator")
-                return True
-            else:
-                logger.info(f"User {user_id} is not an admin (status: {member.status})")
-                return False
-                
-        except UserAdminInvalid as e:
-            logger.warning(f"UserAdminInvalid for user {user_id}: {e}")
-            return False
-        except Exception as e:
-            logger.error(f"Error getting member info for user {user_id}: {e}")
-            
-            # Fallback: try to get administrators list
-            try:
-                logger.info("Trying fallback method: checking administrators list")
-                admins = await client.get_chat_administrators(chat_id)
-                logger.info(f"Found {len(admins)} administrators")
-                
-                for admin in admins:
-                    if admin.user.id == user_id:
-                        logger.info(f"User {user_id} found in administrators list with status: {admin.status}")
-                        return True
-                
-                logger.info(f"User {user_id} not found in administrators list")
-                return False
-                
-            except Exception as e2:
-                logger.error(f"Fallback admin check also failed: {e2}")
-                return False
-                
-    except Exception as e:
-        logger.error(f"Unexpected error in admin check: {e}")
-        return False
-
-async def get_target_user(client: Client, message: types.Message):
-    """Extract target user from reply, mention, or username argument."""
-    target_user = None
-    
-    # First check if replying to a message
-    if message.reply_to_message and message.reply_to_message.from_user:
-        return message.reply_to_message.from_user
-    
-    # Parse command arguments
-    command_parts = message.text.split()
-    if len(command_parts) < 2:
-        return None
-    
-    user_identifier = command_parts[1]
-    
-    # Try different methods to get the user
-    try:
-        # Method 1: Direct username or user ID
-        if user_identifier.startswith('@'):
-            # Remove @ symbol
-            username = user_identifier[1:]
-            target_user = await client.get_users(username)
-        elif user_identifier.isdigit():
-            # User ID
-            user_id = int(user_identifier)
-            target_user = await client.get_users(user_id)
-        else:
-            # Try as username without @
-            target_user = await client.get_users(user_identifier)
-            
-    except Exception as e:
-        logger.warning(f"Could not get user from identifier '{user_identifier}': {e}")
-        
-        # Method 2: Check entities for mentions
-        if message.entities:
-            for entity in message.entities:
-                if entity.type == "mention":
-                    # Extract username from mention
-                    mention_text = message.text[entity.offset:entity.offset + entity.length]
-                    try:
-                        target_user = await client.get_users(mention_text)
-                        break
-                    except Exception as e2:
-                        logger.warning(f"Could not get user from mention '{mention_text}': {e2}")
-                        continue
-                elif entity.type == "text_mention":
-                    # Direct user object from text mention
-                    target_user = entity.user
-                    break
-    
-    return target_user
-
 # ---------------------------
 # Warn command
 # ---------------------------
+@admin_only
 async def warn_command(client: Client, message: types.Message):
     chat = message.chat
     sender = message.from_user
@@ -162,30 +41,21 @@ async def warn_command(client: Client, message: types.Message):
     
     await save_usage(chat, "warn")
     
-    # Check if the user has admin privileges
-    is_admin = await check_admin_permissions(client, chat.id, sender.id)
-    if not is_admin:
-        logger.warning(f"Permission denied for user {sender.id} in chat {chat.id}")
-        await message.reply("You don't have permission to use this command.")
-        return
+    # Get target user using helper function
+    user, reason = await extract_user_and_reason(client, message)
     
-    logger.info(f"Admin check passed for user {sender.id}")
-    
-    # Get target user
-    target_user = await get_target_user(client, message)
-    
-    if not target_user:
+    if not user:
         await message.reply(
             "Please reply to a message or mention a user to warn them.\n"
             "Usage: /warn @username reason or /warn user_id reason or reply to a message with /warn reason"
         )
         return
     
-    logger.info(f"Target user identified: {target_user.id} ({target_user.first_name})")
+    logger.info(f"Target user identified: {user.id} ({user.first_name})")
     
     # Check if trying to warn an admin
     try:
-        target_member = await client.get_chat_member(chat.id, target_user.id)
+        target_member = await client.get_chat_member(chat.id, user.id)
         target_status = str(target_member.status).lower()
         if ('owner' in target_status or 'creator' in target_status or 
             'administrator' in target_status or 'admin' in target_status):
@@ -194,14 +64,8 @@ async def warn_command(client: Client, message: types.Message):
     except:
         pass
     
-    # Extract reason from command
-    command_parts = message.text.split(' ', 2)  # Split into max 3 parts: command, user, reason
-    if len(command_parts) >= 3:
-        reason = command_parts[2].strip()
-    elif message.reply_to_message and len(command_parts) >= 2:
-        # If replying to message, everything after command is the reason
-        reason = ' '.join(command_parts[1:]).strip()
-    else:
+    # Use reason from helper function or default
+    if not reason or reason.strip() == "":
         reason = "No reason provided"
     
     # Check if reason exceeds max length
@@ -219,25 +83,25 @@ async def warn_command(client: Client, message: types.Message):
             async with connection.cursor() as cursor:
                 await cursor.execute(
                     "INSERT INTO warns (chat_id, user_id, warned_by, reason, warn_date) VALUES (?, ?, ?, ?, ?)",
-                    (chat.id, target_user.id, sender.id, reason, warn_date)
+                    (chat.id, user.id, sender.id, reason, warn_date)
                 )
                 warn_id = cursor.lastrowid
                 await connection.commit()
-                logger.info(f"Warning issued: ID {warn_id} to user {target_user.id} in chat {chat.id}")
+                logger.info(f"Warning issued: ID {warn_id} to user {user.id} in chat {chat.id}")
         
         # Get total warns for this user in this chat
         async with aiosqlite.connect("db/warns.db") as connection:
             async with connection.cursor() as cursor:
                 await cursor.execute(
                     "SELECT COUNT(*) FROM warns WHERE chat_id = ? AND user_id = ? AND status = 'active'",
-                    (chat.id, target_user.id)
+                    (chat.id, user.id)
                 )
                 total_warns = await cursor.fetchone()
                 total_warns = total_warns[0] if total_warns else 0
         
         # Send confirmation message
         await message.reply(
-            f"⚠️ Warning issued to {target_user.first_name}\n\n"
+            f"⚠️ Warning issued to {user.first_name}\n\n"
             f"Warning ID: #{warn_id}\n"
             f"Reason: {reason}\n"
             f"Total warnings: {total_warns}\n"
@@ -251,6 +115,7 @@ async def warn_command(client: Client, message: types.Message):
 # ---------------------------
 # Warning delete command
 # ---------------------------
+@admin_only
 async def warndel_command(client: Client, message: types.Message):
     chat = message.chat
     sender = message.from_user
@@ -258,13 +123,6 @@ async def warndel_command(client: Client, message: types.Message):
     logger.info(f"Warndel command called by user {sender.id} in chat {chat.id}")
     
     await save_usage(chat, "warndel")
-    
-    # Check if the user has admin privileges
-    is_admin = await check_admin_permissions(client, chat.id, sender.id)
-    if not is_admin:
-        logger.warning(f"Permission denied for user {sender.id} in chat {chat.id}")
-        await message.reply("You don't have permission to use this command.")
-        return
     
     # Extract warning ID from command
     args = message.text.split()
@@ -327,14 +185,15 @@ async def warndel_command(client: Client, message: types.Message):
 # ---------------------------
 # User warnings command
 # ---------------------------
+@admin_only
 async def warnsuser_command(client: Client, message: types.Message):
     chat = message.chat
     await save_usage(chat, "warnsuser")
     
-    # Get target user
-    target_user = await get_target_user(client, message)
+    # Get target user using helper function
+    user, _ = await extract_user_and_reason(client, message)
     
-    if not target_user:
+    if not user:
         await message.reply(
             "Please reply to a message or mention a user to view their warnings.\n"
             "Usage: /warnsuser @username or /warnsuser user_id or reply to a message with /warnsuser"
@@ -349,16 +208,16 @@ async def warnsuser_command(client: Client, message: types.Message):
             async with connection.cursor() as cursor:
                 await cursor.execute(
                     "SELECT id, warned_by, reason, warn_date FROM warns WHERE chat_id = ? AND user_id = ? AND status = 'active' ORDER BY warn_date DESC",
-                    (chat.id, target_user.id)
+                    (chat.id, user.id)
                 )
                 warnings = await cursor.fetchall()
         
         if not warnings:
-            await message.reply(f"{target_user.first_name} has no active warnings in this chat.")
+            await message.reply(f"{user.first_name} has no active warnings in this chat.")
             return
         
         # Build response message
-        lines = [f"⚠️ Warnings for {target_user.first_name}\n"]
+        lines = [f"⚠️ Warnings for {user.first_name}\n"]
         
         for warn_id, warned_by, reason, warn_date in warnings:
             # Format date
@@ -395,7 +254,7 @@ async def warnsuser_command(client: Client, message: types.Message):
             for i in range(1, len(lines)):
                 if len(current_message) + len(lines[i]) + 2 > 4000:
                     messages.append(current_message)
-                    current_message = f"⚠️ **Warnings for {target_user.first_name} (continued)**\n\n{lines[i]}"
+                    current_message = f"⚠️ **Warnings for {user.first_name} (continued)**\n\n{lines[i]}"
                 else:
                     current_message += "\n" + lines[i]
             
@@ -412,6 +271,7 @@ async def warnsuser_command(client: Client, message: types.Message):
 # ---------------------------
 # List all warnings command
 # ---------------------------
+@admin_only
 async def warnslist_command(client: Client, message: types.Message):
     chat = message.chat
     sender = message.from_user
@@ -419,13 +279,6 @@ async def warnslist_command(client: Client, message: types.Message):
     logger.info(f"Warnslist command called by user {sender.id} in chat {chat.id}")
     
     await save_usage(chat, "warnslist")
-    
-    # Check if the user has admin privileges
-    is_admin = await check_admin_permissions(client, chat.id, sender.id)
-    if not is_admin:
-        logger.warning(f"Permission denied for user {sender.id} in chat {chat.id}")
-        await message.reply("You don't have permission to use this command.")
-        return
     
     try:
         await init_warns_db()
@@ -514,3 +367,45 @@ async def warnslist_command(client: Client, message: types.Message):
     except Exception as e:
         await message.reply(f"An error occurred while fetching warnings: {str(e)}")
         logger.error(f"Error in warnslist command: {e}")
+        formatted_date = warn_date
+        
+        # Get admin info
+        try:
+            admin_user = await client.get_users(warned_by)
+            admin_name = admin_user.first_name
+        except:
+            admin_name = f"Admin {warned_by}"
+        
+        lines.append(
+            f"#{warn_id} - {formatted_date}\n"
+            f"Reason: {reason}\n"
+            f"By: {admin_name}\n"
+        )
+        
+        lines.append(f"\nTotal active warnings: {len(warnings)}")
+        
+        # Handle message length limit
+        full_message = "\n".join(lines)
+        if len(full_message) <= 4000:
+            await message.reply(full_message)
+        else:
+            # Split into multiple messages
+            messages = []
+            current_message = lines[0]
+            
+            for i in range(1, len(lines)):
+                if len(current_message) + len(lines[i]) + 2 > 4000:
+                    messages.append(current_message)
+                    current_message = f"⚠️ **Warnings for {user.first_name} (continued)**\n\n{lines[i]}"
+                else:
+                    current_message += "\n" + lines[i]
+            
+            messages.append(current_message)
+            
+            for msg in messages:
+                await message.reply(msg)
+                await asyncio.sleep(0.5)
+        
+    except Exception as e:
+        await message.reply(f"An error occurred while fetching warnings: {str(e)}")
+        logger.error(f"Error in warnsuser command: {e}")
