@@ -1,5 +1,7 @@
 import datetime
 import time
+import math
+import re
 from pyrogram import Client, types
 from tcp_latency import measure_latency
 from utils.usage import save_usage
@@ -28,6 +30,7 @@ async def help_command(client: Client, message: types.Message):
         "/affirmation - Get a random affirmation\n"
         "/aghpb - Anime girl holding programming book\n"
         "/anime - Search Anime\n"
+        "/calc - Calculate mathematical expressions\n"
         "/character - Search Anime & Manga characters\n"
         "/chatid - Get the current chat ID\n"
         "/choose - Make me choose for you\n"
@@ -188,6 +191,59 @@ async def ping_command(client: Client, message: types.Message):
         )
     except Exception as e:
         await message.reply(f"Error measuring latency: {str(e)}")
+
+# ---------------------------
+# Calculator command
+# ---------------------------
+async def calc_command(client: Client, message: types.Message):
+    chat = message.chat
+    await save_usage(chat, "calc")
+    
+    args = message.text.split(maxsplit=1)
+    if len(args) < 2:
+        await message.reply("Usage: /calc <expression>\nExample: /calc 2 + 2 * 3")
+        return
+    
+    expression = args[1].strip()
+    
+    try:
+        # Replace common math functions with math module equivalents
+        expression = re.sub(r'\bsin\b', 'math.sin', expression)
+        expression = re.sub(r'\bcos\b', 'math.cos', expression)
+        expression = re.sub(r'\btan\b', 'math.tan', expression)
+        expression = re.sub(r'\blog\b', 'math.log', expression)
+        expression = re.sub(r'\bsqrt\b', 'math.sqrt', expression)
+        expression = re.sub(r'\bpi\b', 'math.pi', expression)
+        expression = re.sub(r'\be\b', 'math.e', expression)
+        
+        # Use eval with restricted globals for safety
+        allowed_names = {
+            "__builtins__": {},
+            "math": math,
+            "abs": abs,
+            "round": round,
+            "min": min,
+            "max": max,
+            "pow": pow,
+        }
+        
+        result = eval(expression, allowed_names, {})
+        
+        # Format the result nicely
+        if isinstance(result, float):
+            if result.is_integer():
+                result = int(result)
+            else:
+                result = round(result, 10)
+        
+        await message.reply(f"**Expression:** `{args[1]}`\n**Result:** `{result}`")
+        
+    except ZeroDivisionError:
+        await message.reply("Error: Division by zero!")
+    except (SyntaxError, NameError, TypeError, ValueError) as e:
+        await message.reply(f"Error: Invalid expression. {str(e)}")
+    except Exception as e:
+        await message.reply(f"Error: {str(e)}")
 
 # ---------------------------
 # Profile Picture command
