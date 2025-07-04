@@ -7,10 +7,12 @@ from utils.logger import LOGGING_CONFIG
 from config import BOT_TOKEN, API_ID, API_HASH
 from handlers import check_pending_timers
 from handlers.moderation.warn_system import init_warns_db
+from handlers.moderation.mute_system import start_unmute_checker
 
 async def startup(client: Client):
     await check_pending_timers(client)
     await init_warns_db()
+    start_unmute_checker(client)  # Start the unmute checker
     # Get bot info for debugging
     me = await client.get_me()
     logger = logging.getLogger(__name__)
