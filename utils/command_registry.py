@@ -20,6 +20,7 @@ def register_handlers(client: Client):
     client.add_handler(MessageHandler(handlers.echo_command, filters.command("echo")))
     client.add_handler(MessageHandler(handlers.ping_command, filters.command("ping")))
     client.add_handler(MessageHandler(handlers.chatid_command, filters.command("chatid")))
+    client.add_handler(MessageHandler(handlers.pfp_command, filters.command("pfp")))
     client.add_handler(MessageHandler(handlers.timer_command, filters.command("timer")))
     client.add_handler(MessageHandler(handlers.list_timers_command, filters.command("timerslist")))
     client.add_handler(MessageHandler(handlers.remove_timer_command, filters.command("timerdel")))

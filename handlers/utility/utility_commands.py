@@ -42,6 +42,7 @@ async def help_command(client: Client, message: types.Message):
         "/joindate - Get each member's join date in the group\n"
         "/manga - Search Manga\n"
         "/meme - Get a random meme from Reddit\n"
+        "/pfp - Get user's profile picture\n"
         "/ping - Get bot's latency\n"
         "/reverse - Reverse your words\n"
         "/slot - A slot game\n"
@@ -187,6 +188,60 @@ async def ping_command(client: Client, message: types.Message):
         )
     except Exception as e:
         await message.reply(f"Error measuring latency: {str(e)}")
+
+# ---------------------------
+# Profile Picture command
+# ---------------------------
+async def pfp_command(client: Client, message: types.Message):
+    chat = message.chat
+    await save_usage(chat, "pfp")
+    
+    # Determine target user (reply, argument, or sender)
+    target_user = None
+    if message.reply_to_message and message.reply_to_message.from_user:
+        target_user = message.reply_to_message.from_user
+    else:
+        args = message.text.split()
+        if len(args) > 1:
+            arg = args[1].strip()
+            # Remove '@' if present
+            if arg.startswith('@'):
+                arg = arg[1:]
+            try:
+                # Try as user ID first
+                user_id = int(arg)
+                target_user = await client.get_users(user_id)
+            except ValueError:
+                try:
+                    # Try as username
+                    target_user = await client.get_users(arg)
+                except Exception:
+                    await message.reply("Error: Unable to find a user with the provided identifier.")
+                    return
+        else:
+            # Use message sender
+            target_user = message.from_user
+    
+    if not target_user:
+        await message.reply("Error: No user found.")
+        return
+    
+    try:
+        # Get user's profile photos
+        photos = [photo async for photo in client.get_chat_photos(target_user.id)]
+        
+        if not photos:
+            await message.reply(f"{target_user.first_name} doesn't have a profile picture.")
+            return
+        
+        # Send the latest profile photo
+        await message.reply_photo(
+            photos[0].file_id,
+            caption=f"Profile picture of {target_user.first_name}"
+        )
+        
+    except Exception as e:
+        await message.reply(f"Error retrieving profile picture: {str(e)}")
 
 # ---------------------------
 # Chat ID command
