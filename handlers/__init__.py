@@ -2,8 +2,9 @@ from .admin.admin_commands import *
 from .ai.ai_commands import *
 from .anime.anime_commands import *
 from .anime.anime_callbacks import *
-from .moderation.mod import *
+from .moderation.mute_system import *
 from .moderation.warn_system import *
+from .moderation.ban_system import *
 from .timer.timer import *
 from .timer.timer_scheduler import *
 from .trivia.trivia_commands import *
