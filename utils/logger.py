@@ -39,7 +39,7 @@ LOGGING_CONFIG = {
     # Optionally, set levels for module-specific loggers
     "loggers": {
         "db": {
-            "level": "INFO",  # example: always log INFO for database operations
+            "level": "DEBUG" if DEBUG else "INFO",  # Updated to match other loggers
             "handlers": ["file"],
             "propagate": False,
         },

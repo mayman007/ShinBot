@@ -6,9 +6,14 @@ from utils.command_registry import register_handlers
 from utils.logger import LOGGING_CONFIG
 from config import BOT_TOKEN, API_ID, API_HASH
 from handlers import check_pending_timers
+from handlers.moderation.warn_system import init_warns_db
 
 async def startup(client: Client):
     await check_pending_timers(client)
+    await init_warns_db()
+    # Get bot info for debugging
+    me = await client.get_me()
+    logging.getLogger(__name__).info(f"Bot started: @{me.username} (ID: {me.id})")
 
 async def main():
     # Create necessary directories
