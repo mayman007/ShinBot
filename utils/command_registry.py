@@ -2,6 +2,7 @@ from pyrogram import filters, Client
 from pyrogram.handlers import MessageHandler, CallbackQueryHandler
 from config import ENABLE_GEMINI_COMMAND, ENABLE_IMAGINE_COMMAND, ENABLE_MEME_COMMAND
 import handlers as handlers
+from handlers.moderation.mute_system import mute_command, unmute_command
 
 
 # Register command handlers
@@ -9,8 +10,8 @@ def register_handlers(client: Client):
     # Pyrogram's command filter handles the bot username suffix automatically.
     client.add_handler(MessageHandler(handlers.start_command, filters.command("start")))
     client.add_handler(MessageHandler(handlers.help_command, filters.command("help")))
-    client.add_handler(MessageHandler(handlers.mute_command, filters.command("mute")))
-    client.add_handler(MessageHandler(handlers.unmute_command, filters.command("unmute")))
+    client.add_handler(MessageHandler(mute_command, filters.command("mute") & filters.group))
+    client.add_handler(MessageHandler(unmute_command, filters.command("unmute") & filters.group))
     client.add_handler(MessageHandler(handlers.list_join_dates, filters.command("joindate")))
     client.add_handler(MessageHandler(handlers.usagedata_command, filters.command("usagedata")))
     client.add_handler(MessageHandler(handlers.character_command, filters.command("character")))
@@ -53,7 +54,8 @@ def register_handlers(client: Client):
         "start", "help", "mute", "unmute", "joindate", "usagedata", "character",
         "anime", "manga", "aghpb", "echo", "ping", "calc", "pfp", "chatid", "timer",
         "timerslist", "timerdel", "reverse", "slot", "coinflip", "geekjoke", "dadjoke",
-        "dog", "affirmation", "advice", "choose", "yt", "warn", "warndel", "warnsuser", "warnslist"
+        "dog", "affirmation", "advice", "choose", "yt", "warn", "warndel", "warnsuser",
+        "warnslist", "ban", "unban", "mute", "unmute"
     ]
 
     # Add conditional commands to the list
