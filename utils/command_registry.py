@@ -34,15 +34,16 @@ def register_handlers(client: Client):
     client.add_handler(MessageHandler(handlers.dog_command, filters.command("dog")))
     client.add_handler(MessageHandler(handlers.affirmation_command, filters.command("affirmation")))
     client.add_handler(MessageHandler(handlers.advice_command, filters.command("advice")))
-    if ENABLE_MEME_COMMAND: client.add_handler(MessageHandler(handlers.meme_command, filters.command("meme")))
-    if ENABLE_GEMINI_COMMAND: client.add_handler(MessageHandler(handlers.gemini_command, filters.command("gemini")))
-    if ENABLE_IMAGINE_COMMAND: client.add_handler(MessageHandler(handlers.imagine_command, filters.command("imagine")))
-
-    # Warn system commands
     client.add_handler(MessageHandler(handlers.warn_command, filters.command("warn")))
     client.add_handler(MessageHandler(handlers.warndel_command, filters.command("warndel")))
     client.add_handler(MessageHandler(handlers.warnsuser_command, filters.command("warnsuser")))
     client.add_handler(MessageHandler(handlers.warnslist_command, filters.command("warnslist")))
+    client.add_handler(MessageHandler(handlers.ban_user, filters.command("ban")))
+    client.add_handler(MessageHandler(handlers.unban_user, filters.command("unban")))
+    if ENABLE_MEME_COMMAND: client.add_handler(MessageHandler(handlers.meme_command, filters.command("meme")))
+    if ENABLE_GEMINI_COMMAND: client.add_handler(MessageHandler(handlers.gemini_command, filters.command("gemini")))
+    if ENABLE_IMAGINE_COMMAND: client.add_handler(MessageHandler(handlers.imagine_command, filters.command("imagine")))
+
 
     # YouTube command handlers
     handlers.register_yt_handlers(client)  # Use the proper registration function
