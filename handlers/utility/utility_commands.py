@@ -43,6 +43,7 @@ async def help_command(client: Client, message: types.Message):
         "/echo - Repeats your words\n"
         "/geekjoke - Get a random geek joke\n"
         "/gemini - Chat with Google's Gemini Pro AI\n"
+        "/groupinfo - Get group's info\n"
         "/help - This message\n"
         "/imagine - Generate AI images\n"
         "/joindate - Get each member's join date in the group\n"
