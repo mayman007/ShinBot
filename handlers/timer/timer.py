@@ -4,6 +4,7 @@ import aiosqlite
 from utils.usage import save_usage
 from pyrogram import Client, types
 from handlers.timer.timer_scheduler import get_chat_timer_table, schedule_timer, cancel_timer
+from utils.decorators import check_admin_permissions
 
 # ---------------------------
 # Timer Command Handler
@@ -279,14 +280,8 @@ async def remove_timer_command(client: Client, message: types.Message):
             await message.reply("Invalid timer ID. Please provide a numeric ID from the timer list.")
             return
     
-    # Get the user's permissions
-    is_admin = False
-    if chat.type in ['group', 'supergroup']:
-        try:
-            participant = await client.get_chat_member(chat.id, sender.id)
-            is_admin = participant.status in ['administrator', 'creator']
-        except Exception:
-            is_admin = False
+    # Use the robust admin checking function
+    is_admin = await check_admin_permissions(client, chat.id, sender.id)
     
     # Get all timers for this chat
     now = datetime.datetime.now()
