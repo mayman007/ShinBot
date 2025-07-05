@@ -11,4 +11,5 @@ from .timer.timer_scheduler import *
 from .trivia.trivia_commands import *
 from .trivia.trivia_events import *
 from .utility.utility_commands import *
+from .utility.groupinfo import *
 from .yt.yt_commands import *
