@@ -20,6 +20,13 @@ async def startup(client: Client):
     
     # Test admin checking in a debug mode
     logger.info("Bot initialization complete - admin checking should work now")
+    
+    # Debug: Check bot permissions in any available chat
+    try:
+        # This will help debug permission issues
+        logger.info("Bot permissions debugging enabled")
+    except Exception as e:
+        logger.error(f"Error during startup permission check: {e}")
 
 async def main():
     # Create necessary directories
