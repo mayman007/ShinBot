@@ -2,6 +2,7 @@ import datetime
 import time
 import math
 import re
+import asyncio
 from pyrogram import Client, types
 from tcp_latency import measure_latency
 from utils.usage import save_usage
@@ -211,12 +212,30 @@ async def calc_command(client: Client, message: types.Message):
     
     args = message.text.split(maxsplit=1)
     if len(args) < 2:
-        await message.reply("Usage: /calc <expression>\nExample: /calc 2 + 2 * 3")
+        await message.reply("Usage: /calc <expression>\nExample: /calc 2 + 2 * 3\nSupports: +, -, *, /, %, ^ (power), ! (factorial), sin, cos, tan, log, sqrt, pi, e")
         return
     
     expression = args[1].strip()
     
+    # Limit expression length to prevent abuse
+    if len(expression) > 200:
+        await message.reply("Error: Expression too long (max 200 characters)")
+        return
+    
     try:
+        # Check for factorial abuse before processing
+        factorial_matches = re.findall(r'(\d+)!', expression)
+        for match in factorial_matches:
+            if int(match) > 20:
+                await message.reply("Error: Factorial input too large (max 20!)")
+                return
+        
+        # Replace ^ with ** for exponentiation
+        expression = re.sub(r'\^', '**', expression)
+        
+        # Replace factorial notation (e.g., 5! becomes math.factorial(5))
+        expression = re.sub(r'(\d+)!', r'math.factorial(\1)', expression)
+        
         # Replace common math functions with math module equivalents
         expression = re.sub(r'\bsin\b', 'math.sin', expression)
         expression = re.sub(r'\bcos\b', 'math.cos', expression)
@@ -237,7 +256,20 @@ async def calc_command(client: Client, message: types.Message):
             "pow": pow,
         }
         
-        result = eval(expression, allowed_names, {})
+        # Use asyncio timeout for cross-platform compatibility
+        async def evaluate_expression():
+            return eval(expression, allowed_names, {})
+        
+        try:
+            result = await asyncio.wait_for(evaluate_expression(), timeout=5.0)
+        except asyncio.TimeoutError:
+            await message.reply("Error: Calculation timeout (too complex)")
+            return
+        
+        # Check if result is too large
+        if isinstance(result, (int, float)) and abs(result) > 1e15:
+            await message.reply("Error: Result too large to display")
+            return
         
         # Format the result nicely
         if isinstance(result, float):
@@ -311,6 +343,11 @@ async def pfp_command(client: Client, message: types.Message):
 
 # ---------------------------
 # Chat ID command
+# ---------------------------
+async def chatid_command(client: Client, message: types.Message):
+    chat = message.chat
+    await save_usage(chat, "chatid")
+    await message.reply(f"Chat ID: `{chat.id}`")
 # ---------------------------
 async def chatid_command(client: Client, message: types.Message):
     chat = message.chat
