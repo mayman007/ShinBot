@@ -13,3 +13,4 @@ from .trivia.trivia_events import *
 from .utility.utility_commands import *
 from .utility.groupinfo import *
 from .yt.yt_commands import *
+from .trivia.rps_commands import *

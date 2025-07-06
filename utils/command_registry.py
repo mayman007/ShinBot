@@ -30,6 +30,7 @@ def register_handlers(client: Client):
     client.add_handler(MessageHandler(handlers.slot_command, filters.command("slot")))
     client.add_handler(MessageHandler(handlers.coinflip_command, filters.command("coinflip")))
     client.add_handler(MessageHandler(handlers.choose_command, filters.command("choose")))
+    client.add_handler(MessageHandler(handlers.rps_command, filters.command("rps")))
     client.add_handler(MessageHandler(handlers.geekjoke_command, filters.command("geekjoke")))
     client.add_handler(MessageHandler(handlers.dadjoke_command, filters.command("dadjoke")))
     client.add_handler(MessageHandler(handlers.dog_command, filters.command("dog")))
@@ -56,7 +57,7 @@ def register_handlers(client: Client):
         "start", "help", "mute", "unmute", "joindate", "usagedata", "character",
         "anime", "manga", "aghpb", "echo", "ping", "calc", "groupinfo", "pfp", "chatid", "timer",
         "timerslist", "timerdel", "reverse", "slot", "coinflip", "geekjoke", "dadjoke",
-        "dog", "affirmation", "advice", "choose", "yt", "warn", "warndel", "warnsuser",
+        "dog", "affirmation", "advice", "choose", "rps", "yt", "warn", "warndel", "warnsuser",
         "warnslist", "ban", "unban", "mute", "unmute", "promote", "demote"
     ]
 

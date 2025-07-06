@@ -54,6 +54,7 @@ async def help_command(client: Client, message: types.Message):
         "/ping - Get bot's latency\n"
         "/promote - Promote a user to admin\n"
         "/reverse - Reverse your words\n"
+        "/rps - Play Rock Paper Scissors\n"
         "/slot - A slot game\n"
         "/start - Bot's introduction\n"
         "/timer - Set yourself a timer\n"

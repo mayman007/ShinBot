@@ -8,6 +8,12 @@ import ast
 async def button_click_handler(client: Client, callback_query):
     data = callback_query.data
     
+    # Handle RPS callbacks
+    if data.startswith("rps_"):
+        from handlers.trivia.rps_commands import rps_callback_handler
+        await rps_callback_handler(client, callback_query)
+        return
+    
     if data.startswith("anime"):
         async with aiosqlite.connect("db/database.db") as connection:
             async with connection.cursor() as cursor:
