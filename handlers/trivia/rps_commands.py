@@ -3,6 +3,7 @@ import time
 from pyrogram import Client, types
 from pyrogram import filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from pyrogram.errors import FloodWait
 from utils.usage import save_usage
 
 # Game data storage (in production, consider using a database)
@@ -99,7 +100,10 @@ async def rps_command(client: Client, message: types.Message):
             "player1_choice": None,
             "player2_choice": None,
             "current_turn": "player1",
-            "start_time": current_time
+            "start_time": current_time,
+            "player1_wins": 0,
+            "player2_wins": 0,
+            "ties": 0
         }
         
         text = f"🎮 **Rock Paper Scissors**\n\n{message.from_user.first_name} vs {opponent.first_name}\n\nWaiting for **{message.from_user.first_name}** to choose...\n\nRock, paper, or scissors? Choose wisely!"
@@ -111,7 +115,10 @@ async def rps_command(client: Client, message: types.Message):
             "player2": None,
             "player1_choice": None,
             "bot_choice": None,
-            "start_time": current_time
+            "start_time": current_time,
+            "player_wins": 0,
+            "bot_wins": 0,
+            "ties": 0
         }
         
         text = "🎮 **Rock Paper Scissors**\n\nYou vs Bot\n\nRock, paper, or scissors? Choose wisely!"
@@ -165,6 +172,7 @@ async def rps_callback_handler(client: Client, callback_query):
         if result == 0:
             result_text = "Well, that was weird. We tied."
             emoji = "🤝"
+            game_data["ties"] += 1
         elif result == 1:
             if choice == "rock" and bot_choice == "scissors":
                 result_text = "Aw, you beat me. It won't happen again!"
@@ -173,6 +181,7 @@ async def rps_callback_handler(client: Client, callback_query):
             else:  # scissors beats paper
                 result_text = "Bruh. >: |"
             emoji = "🎉"
+            game_data["player_wins"] += 1
         else:
             if bot_choice == "rock" and choice == "scissors":
                 result_text = "HAHA!! I JUST CRUSHED YOU!! I rock!!"
@@ -181,27 +190,42 @@ async def rps_callback_handler(client: Client, callback_query):
             else:  # bot scissors beats player paper
                 result_text = "I WON!!!"
             emoji = "🤖"
+            game_data["bot_wins"] += 1
         
         # Create play again button
         play_again_button = [[InlineKeyboardButton("🔄 Play Again", callback_data="rps_play_again")]]
         
+        # Add score to final text
+        score_text = f"\n\n📊 **Score:**\nYou: {game_data['player_wins']} | Bot: {game_data['bot_wins']} | Ties: {game_data['ties']}"
+        
         final_text = (f"{emoji} **Game Result**\n\n"
                      f"{result_text}\n\n"
                      f"**Your choice:** {player_choice_text}\n"
-                     f"**My choice:** {bot_choice_text}")
+                     f"**My choice:** {bot_choice_text}"
+                     f"{score_text}")
         
-        await callback_query.message.edit_text(final_text, reply_markup=InlineKeyboardMarkup(play_again_button))
+        try:
+            await callback_query.message.edit_text(final_text, reply_markup=InlineKeyboardMarkup(play_again_button))
+        except FloodWait as e:
+            await callback_query.answer(f"Please wait {e.value} seconds before trying again due to rate limits.", show_alert=True)
+            return
+        except Exception as e:
+            await callback_query.answer(f"Error updating game: {str(e)}", show_alert=True)
+            return
         
         # Store game result for play again
         active_games[message_id] = {
             "type": "result",
             "player1": game_data["player1"],
-            "start_time": time.time()
+            "start_time": time.time(),
+            "player_wins": game_data["player_wins"],
+            "bot_wins": game_data["bot_wins"],
+            "ties": game_data["ties"]
         }
         
     else:
         # Player vs Player
-        if user.id == game_data["player1"].id and game_data["current_turn"] == "player1":
+        if user.id == game_data["player1"].id and game_data.get("current_turn") == "player1":
             game_data["player1_choice"] = choice
             game_data["current_turn"] = "player2"
             
@@ -211,9 +235,16 @@ async def rps_callback_handler(client: Client, callback_query):
                    f"Waiting for **{game_data['player2'].first_name}** to choose...\n\n"
                    f"Rock, paper, or scissors? Choose wisely!")
             
-            await callback_query.message.edit_text(text, reply_markup=callback_query.message.reply_markup)
-            
-        elif user.id == game_data["player2"].id and game_data["current_turn"] == "player2":
+            try:
+                await callback_query.message.edit_text(text, reply_markup=callback_query.message.reply_markup)
+            except FloodWait as e:
+                await callback_query.answer(f"Please wait {e.value} seconds before trying again due to rate limits.", show_alert=True)
+                return
+            except Exception as e:
+                await callback_query.answer(f"Error updating game: {str(e)}", show_alert=True)
+                return
+
+        elif user.id == game_data["player2"].id and game_data.get("current_turn") == "player2":
             game_data["player2_choice"] = choice
             
             # Both players have chosen, determine winner
@@ -228,33 +259,54 @@ async def rps_callback_handler(client: Client, callback_query):
             if result == 0:
                 result_text = "Well, that was weird. Both of you tied."
                 emoji = "🤝"
+                game_data["ties"] += 1
             elif result == 1:
                 result_text = f"**{game_data['player1'].first_name}** wins!"
                 emoji = "🎉"
+                game_data["player1_wins"] += 1
             else:
                 result_text = f"**{game_data['player2'].first_name}** wins!"
                 emoji = "🎉"
+                game_data["player2_wins"] += 1
             
             # Create play again button (only player1 can use it)
             play_again_button = [[InlineKeyboardButton("🔄 Play Again", callback_data="rps_play_again")]]
             
+            # Add score to final text
+            score_text = f"\n\n📊 **Score:**\n{game_data['player1'].first_name}: {game_data['player1_wins']} | {game_data['player2'].first_name}: {game_data['player2_wins']} | Ties: {game_data['ties']}"
+            
             final_text = (f"{emoji} **Game Result**\n\n"
                          f"{result_text}\n\n"
                          f"**{game_data['player1'].first_name}'s choice:** {player1_choice_text}\n"
-                         f"**{game_data['player2'].first_name}'s choice:** {player2_choice_text}")
+                         f"**{game_data['player2'].first_name}'s choice:** {player2_choice_text}"
+                         f"{score_text}")
             
-            await callback_query.message.edit_text(final_text, reply_markup=InlineKeyboardMarkup(play_again_button))
+            try:
+                await callback_query.message.edit_text(final_text, reply_markup=InlineKeyboardMarkup(play_again_button))
+            except FloodWait as e:
+                await callback_query.answer(f"Please wait {e.value} seconds before trying again due to rate limits.", show_alert=True)
+                return
+            except Exception as e:
+                await callback_query.answer(f"Error updating game: {str(e)}", show_alert=True)
+                return
             
             # Store game result for play again
             active_games[message_id] = {
                 "type": "result",
                 "player1": game_data["player1"],
                 "player2": game_data.get("player2"),
-                "start_time": time.time()
+                "start_time": time.time(),
+                "player1_wins": game_data["player1_wins"],
+                "player2_wins": game_data["player2_wins"],
+                "ties": game_data["ties"]
             }
             
         else:
-            await callback_query.answer("This is not your turn/game!", show_alert=True)
+            # Check if this is a completed game (result type)
+            if game_data.get("type") == "result":
+                await callback_query.answer("This game has already finished. Use the Play Again button to start a new game.", show_alert=True)
+            else:
+                await callback_query.answer("This is not your turn/game!", show_alert=True)
             return
 
 async def rps_play_again_callback(client: Client, callback_query):
@@ -301,10 +353,15 @@ async def rps_play_again_callback(client: Client, callback_query):
             "player1_choice": None,
             "player2_choice": None,
             "current_turn": "player1",
-            "start_time": current_time
+            "start_time": current_time,
+            "player1_wins": game_data.get("player1_wins", 0),
+            "player2_wins": game_data.get("player2_wins", 0),
+            "ties": game_data.get("ties", 0)
         }
         
-        text = f"🎮 **Rock Paper Scissors**\n\n{game_data['player1'].first_name} vs {game_data['player2'].first_name}\n\nWaiting for **{game_data['player1'].first_name}** to choose...\n\nRock, paper, or scissors? Choose wisely!"
+        score_text = f"\n\n📊 **Current Score:**\n{game_data['player1'].first_name}: {game_data.get('player1_wins', 0)} | {game_data['player2'].first_name}: {game_data.get('player2_wins', 0)} | Ties: {game_data.get('ties', 0)}"
+        
+        text = f"🎮 **Rock Paper Scissors**\n\n{game_data['player1'].first_name} vs {game_data['player2'].first_name}\n\nWaiting for **{game_data['player1'].first_name}** to choose...\n\nRock, paper, or scissors? Choose wisely!{score_text}"
     else:
         # Player vs Bot rematch
         new_game_data = {
@@ -313,10 +370,32 @@ async def rps_play_again_callback(client: Client, callback_query):
             "player2": None,
             "player1_choice": None,
             "bot_choice": None,
-            "start_time": current_time
+            "start_time": current_time,
+            "player_wins": game_data.get("player_wins", 0),
+            "bot_wins": game_data.get("bot_wins", 0),
+            "ties": game_data.get("ties", 0)
         }
         
-        text = "🎮 **Rock Paper Scissors**\n\nYou vs Bot\n\nRock, paper, or scissors? Choose wisely!"
+        score_text = f"\n\n📊 **Current Score:**\nYou: {game_data.get('player_wins', 0)} | Bot: {game_data.get('bot_wins', 0)} | Ties: {game_data.get('ties', 0)}"
+        
+        text = f"🎮 **Rock Paper Scissors**\n\nYou vs Bot\n\nRock, paper, or scissors? Choose wisely!{score_text}"
     
-    await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+    try:
+        await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+    except FloodWait as e:
+        await callback_query.answer(f"Please wait {e.value} seconds before starting a new game due to rate limits.", show_alert=True)
+        return
+    except Exception as e:
+        await callback_query.answer(f"Error starting new game: {str(e)}", show_alert=True)
+        return
+    
     active_games[message_id] = new_game_data
+
+def register_rps_handlers(client: Client):
+    """Register RPS callback handlers with the client."""
+    from pyrogram.handlers import CallbackQueryHandler
+    
+    client.add_handler(CallbackQueryHandler(
+        rps_callback_handler, 
+        filters.regex(r"^rps_")
+    ))
