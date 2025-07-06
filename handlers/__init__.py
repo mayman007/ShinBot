@@ -1,4 +1,4 @@
-from .admin.admin_commands import *
+from .admin.usage import *
 from .ai.ai_commands import *
 from .anime.anime_commands import *
 from .anime.anime_callbacks import *
