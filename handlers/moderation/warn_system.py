@@ -53,17 +53,6 @@ async def warn_command(client: Client, message: types.Message):
     
     logger.info(f"Target user identified: {user.id} ({user.first_name})")
     
-    # Check if trying to warn an admin
-    try:
-        target_member = await client.get_chat_member(chat.id, user.id)
-        target_status = str(target_member.status).lower()
-        if ('owner' in target_status or 'creator' in target_status or 
-            'administrator' in target_status or 'admin' in target_status):
-            await message.reply("You cannot warn administrators.")
-            return
-    except:
-        pass
-    
     # Use reason from helper function or default
     if not reason or reason.strip() == "":
         reason = "No reason provided"
@@ -127,7 +116,7 @@ async def warndel_command(client: Client, message: types.Message):
     # Extract warning ID from command
     args = message.text.split()
     if len(args) < 2:
-        await message.reply("Please provide a warning ID. Usage: /warndel <warning_id>")
+        await message.reply("Please provide a warning ID. Usage: `/warndel [ID]`\nSee warnings IDs from `/warnslist` or `/warnsuser @user`")
         return
     
     try:
@@ -367,45 +356,4 @@ async def warnslist_command(client: Client, message: types.Message):
     except Exception as e:
         await message.reply(f"An error occurred while fetching warnings: {str(e)}")
         logger.error(f"Error in warnslist command: {e}")
-        formatted_date = warn_date
         
-        # Get admin info
-        try:
-            admin_user = await client.get_users(warned_by)
-            admin_name = admin_user.first_name
-        except:
-            admin_name = f"Admin {warned_by}"
-        
-        lines.append(
-            f"#{warn_id} - {formatted_date}\n"
-            f"Reason: {reason}\n"
-            f"By: {admin_name}\n"
-        )
-        
-        lines.append(f"\nTotal active warnings: {len(warnings)}")
-        
-        # Handle message length limit
-        full_message = "\n".join(lines)
-        if len(full_message) <= 4000:
-            await message.reply(full_message)
-        else:
-            # Split into multiple messages
-            messages = []
-            current_message = lines[0]
-            
-            for i in range(1, len(lines)):
-                if len(current_message) + len(lines[i]) + 2 > 4000:
-                    messages.append(current_message)
-                    current_message = f"⚠️ **Warnings for {user.first_name} (continued)**\n\n{lines[i]}"
-                else:
-                    current_message += "\n" + lines[i]
-            
-            messages.append(current_message)
-            
-            for msg in messages:
-                await message.reply(msg)
-                await asyncio.sleep(0.5)
-        
-    except Exception as e:
-        await message.reply(f"An error occurred while fetching warnings: {str(e)}")
-        logger.error(f"Error in warnsuser command: {e}")
