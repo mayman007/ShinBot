@@ -7,7 +7,6 @@ from pyrogram import Client, types
 from pyrogram.errors import UserAdminInvalid
 from utils.usage import save_usage
 from utils.decorators import admin_only
-from utils.helpers import extract_user_and_reason
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +113,22 @@ async def unmute_checker_task(client: Client):
             logger.error(f"Error in unmute checker task: {e}")
             await asyncio.sleep(60)
 
+async def is_user_muted(client: Client, chat_id: int, user_id: int) -> bool:
+    """Check if a user is currently muted."""
+    try:
+        member = await client.get_chat_member(chat_id, user_id)
+        # Check if user has restricted permissions (muted)
+        if member.restricted_by and member.permissions:
+            # If all main permissions are False, user is muted
+            perms = member.permissions
+            return not (perms.can_send_messages or 
+                       perms.can_send_media_messages or 
+                       perms.can_send_other_messages or 
+                       perms.can_add_web_page_previews)
+        return False
+    except:
+        return False
+
 # ---------------------------
 # Mute command
 # ---------------------------
@@ -122,18 +137,48 @@ async def mute_command(client: Client, message: types.Message):
     chat = message.chat
     await save_usage(chat, "mute")
     
-    # Extract command arguments
-    args = message.text.split(' ')
-    duration = None  # Default: infinite mute
-    reason_parts = []
-    time_found = False
+    # Parse command arguments
+    args = message.text.split()[1:]  # Remove command itself
     
-    # Parse all arguments to find time duration (format: 1h, 30m, 10s etc.)
-    for i in range(1, len(args)):
-        arg = args[i].lower()
-        time_match = re.match(r'^(\d+)([hmds])$', arg)
-        if time_match and not time_found:
-            time_found = True
+    if not args:
+        await message.reply("Please specify a user to mute.\n**Usage:** `/mute @username [time] [reason]`")
+        return
+    
+    # Extract user (first argument)
+    user_arg = args[0]
+    target_user = None
+    
+    # Try to get user from mention or username
+    if user_arg.startswith('@'):
+        username = user_arg[1:]  # Remove @
+        try:
+            target_user = await client.get_users(username)
+        except:
+            await message.reply(f"❌ User {user_arg} not found.")
+            return
+    elif message.reply_to_message:
+        target_user = message.reply_to_message.from_user
+    else:
+        await message.reply("Please mention a user with @ or reply to their message.\n**Usage:** `/mute @username [time] [reason]`")
+        return
+    
+    # Validate target_user
+    if not target_user or not hasattr(target_user, 'id') or target_user.id is None:
+        await message.reply("❌ Invalid user.")
+        return
+    
+    # Check if user is already muted
+    if await is_user_muted(client, chat.id, target_user.id):
+        await message.reply(f"❌ User {target_user.mention} is already muted.")
+        return
+    
+    # Parse remaining arguments for time and reason
+    duration = None
+    reason_parts = []
+    
+    for arg in args[1:]:  # Skip user argument
+        time_match = re.match(r'^(\d+)([hmds])$', arg.lower())
+        if time_match and duration is None:  # Only take first time found
             amount = int(time_match.group(1))
             unit = time_match.group(2)
             if unit == 'h':
@@ -145,34 +190,30 @@ async def mute_command(client: Client, message: types.Message):
             elif unit == 's':
                 duration = amount / 60  # seconds to minutes
         else:
-            reason_parts.append(args[i])
+            reason_parts.append(arg)
     
-    # Get target user and reason using helper function
-    target_user, helper_reason = await extract_user_and_reason(client, message)
-    
-    # Use helper reason if no reason found in time parsing, otherwise use parsed reason
-    if not reason_parts and helper_reason:
-        reason = helper_reason
-    elif reason_parts:
-        reason = ' '.join(reason_parts)
-    else:
-        reason = "No reason provided"
-    
-    if not target_user:
-        await message.reply("Please reply to a message or mention a user to mute them.\n**Usage:** `/mute @username [time] [reason]` or reply to a message with `/mute [time] [reason]`")
-        return
+    reason = ' '.join(reason_parts) if reason_parts else "No reason provided"
     
     # Calculate until when the user will be muted (None for infinite)
     mute_until = None if duration is None else datetime.now() + timedelta(minutes=duration)
     
     try:
         # Apply mute restriction
-        await client.restrict_chat_member(
-            chat.id,
-            target_user.id,
-            types.ChatPermissions(), # No permissions
-            until_date=mute_until
-        )
+        if mute_until:
+            # Temporary mute with expiration
+            await client.restrict_chat_member(
+                chat.id,
+                target_user.id,
+                types.ChatPermissions(), # No permissions
+                until_date=mute_until
+            )
+        else:
+            # Permanent mute (no until_date parameter)
+            await client.restrict_chat_member(
+                chat.id,
+                target_user.id,
+                types.ChatPermissions() # No permissions
+            )
         
         # Schedule automatic unmute if duration is specified
         if mute_until:
@@ -208,6 +249,7 @@ async def mute_command(client: Client, message: types.Message):
     except UserAdminInvalid:
         await message.reply("❌ I need admin privileges to mute users.")
     except Exception as e:
+        logger.error(f"Error in mute command: {e}")
         await message.reply(f"❌ An error occurred: {str(e)}")
 
 # ---------------------------
@@ -218,15 +260,38 @@ async def unmute_command(client: Client, message: types.Message):
     chat = message.chat
     await save_usage(chat, "unmute")
     
-    # Get target user and reason using helper function
-    target_user, reason = await extract_user_and_reason(client, message)
+    # Parse command arguments
+    args = message.text.split()[1:]  # Remove command itself
     
-    if not target_user:
-        await message.reply("Please reply to a message or mention a user to unmute them.\n**Usage:** `/unmute @username [reason]` or reply to a message with `/unmute [reason]`")
+    target_user = None
+    reason_parts = []
+    
+    if args:
+        # Extract user (first argument)
+        user_arg = args[0]
+        
+        # Try to get user from mention or username
+        if user_arg.startswith('@'):
+            username = user_arg[1:]  # Remove @
+            try:
+                target_user = await client.get_users(username)
+            except:
+                await message.reply(f"❌ User {user_arg} not found.")
+                return
+            reason_parts = args[1:]  # Remaining args are reason
+        else:
+            reason_parts = args  # All args are reason if no @ mention
+    
+    # If no user from args, try reply
+    if not target_user and message.reply_to_message:
+        target_user = message.reply_to_message.from_user
+    
+    # Validate target_user
+    if not target_user or not hasattr(target_user, 'id') or target_user.id is None:
+        await message.reply("Please mention a user with @ or reply to their message.\n**Usage:** `/unmute @username [reason]`")
         return
     
-    if not reason:
-        reason = "No reason provided"
+    reason = ' '.join(reason_parts) if reason_parts else "No reason provided"
     
     try:
         # Cancel any scheduled unmute
@@ -248,6 +313,7 @@ async def unmute_command(client: Client, message: types.Message):
     except UserAdminInvalid:
         await message.reply("❌ I need admin privileges to unmute users.")
     except Exception as e:
+        logger.error(f"Error in unmute command: {e}")
         await message.reply(f"❌ An error occurred: {str(e)}")
 
 def start_unmute_checker(client: Client):
