@@ -23,20 +23,26 @@ async def init_mute_db():
                     unmute_time TEXT,
                     reason TEXT,
                     muted_by INTEGER,
+                    mute_message_id INTEGER,
                     status TEXT DEFAULT 'active'
                 )
             """)
+            # Add the new column if it doesn't exist (for existing databases)
+            try:
+                await cursor.execute("ALTER TABLE mute_schedules ADD COLUMN mute_message_id INTEGER")
+            except:
+                pass  # Column already exists
             await connection.commit()
             logger.info("Mute schedules database initialized")
 
-async def schedule_unmute(chat_id: int, user_id: int, unmute_time: datetime, reason: str, muted_by: int):
+async def schedule_unmute(chat_id: int, user_id: int, unmute_time: datetime, reason: str, muted_by: int, mute_message_id: int = None):
     """Schedule an automatic unmute."""
     await init_mute_db()
     async with aiosqlite.connect("db/mute_schedules.db") as connection:
         async with connection.cursor() as cursor:
             await cursor.execute(
-                "INSERT INTO mute_schedules (chat_id, user_id, unmute_time, reason, muted_by) VALUES (?, ?, ?, ?, ?)",
-                (chat_id, user_id, unmute_time.isoformat(), reason, muted_by)
+                "INSERT INTO mute_schedules (chat_id, user_id, unmute_time, reason, muted_by, mute_message_id) VALUES (?, ?, ?, ?, ?, ?)",
+                (chat_id, user_id, unmute_time.isoformat(), reason, muted_by, mute_message_id)
             )
             await connection.commit()
             logger.info(f"Scheduled unmute for user {user_id} in chat {chat_id} at {unmute_time}")
@@ -61,12 +67,12 @@ async def check_pending_unmutes(client: Client):
             async with connection.cursor() as cursor:
                 now = datetime.now().isoformat()
                 await cursor.execute(
-                    "SELECT id, chat_id, user_id, reason FROM mute_schedules WHERE unmute_time <= ? AND status = 'active'",
+                    "SELECT id, chat_id, user_id, reason, mute_message_id FROM mute_schedules WHERE unmute_time <= ? AND status = 'active'",
                     (now,)
                 )
                 pending_unmutes = await cursor.fetchall()
                 
-                for unmute_id, chat_id, user_id, reason in pending_unmutes:
+                for unmute_id, chat_id, user_id, reason, mute_message_id in pending_unmutes:
                     try:
                         # Unmute the user
                         await client.unban_chat_member(chat_id, user_id)
@@ -77,14 +83,19 @@ async def check_pending_unmutes(client: Client):
                             (unmute_id,)
                         )
                         
-                        # Try to send notification
+                        # Try to send notification with user mention and reply to mute message
                         try:
-                            await client.send_message(
-                                chat_id,
-                                f"🔊 **Automatic Unmute**\n"
-                                f"User has been automatically unmuted.\n"
-                                f"**Reason:** {reason}"
-                            )
+                            user = await client.get_users(user_id)
+                            unmute_message = f"🔊 **Automatic Unmute**\n{user.mention} has been automatically unmuted.\n**Reason:** {reason}"
+                            
+                            if mute_message_id:
+                                await client.send_message(
+                                    chat_id,
+                                    unmute_message,
+                                    reply_to_message_id=mute_message_id
+                                )
+                            else:
+                                await client.send_message(chat_id, unmute_message)
                         except:
                             pass  # Don't fail if we can't send message
                         
@@ -197,7 +208,7 @@ async def mute_command(client: Client, message: types.Message):
         
         # Schedule automatic unmute if duration is specified
         if mute_until:
-            await schedule_unmute(chat.id, user.id, mute_until, reason, message.from_user.id)
+            await schedule_unmute(chat.id, user.id, mute_until, reason, message.from_user.id, message.id)
         
         # Send confirmation message
         if duration is None:
