@@ -90,11 +90,11 @@ async def warn_command(client: Client, message: types.Message):
         
         # Send confirmation message
         await message.reply(
-            f"⚠️ Warning issued to {user.first_name}\n\n"
-            f"Warning ID: #{warn_id}\n"
-            f"Reason: {reason}\n"
-            f"Total warnings: {total_warns}\n"
-            f"Issued by: {sender.first_name}"
+            f"⚠️ Warning issued to **{user.first_name}**\n\n"
+            f"**Warning ID:** #{warn_id}\n"
+            f"**Reason:** {reason}\n"
+            f"**Total warnings:** {total_warns}\n"
+            f"**Issued by:** {sender.first_name}"
         )
         
     except Exception as e:
@@ -206,7 +206,7 @@ async def warnsuser_command(client: Client, message: types.Message):
             return
         
         # Build response message
-        lines = [f"⚠️ Warnings for {user.first_name}\n"]
+        lines = [f"**⚠️ Warnings for {user.first_name}**\n"]
         
         for warn_id, warned_by, reason, warn_date in warnings:
             # Format date
@@ -225,8 +225,8 @@ async def warnsuser_command(client: Client, message: types.Message):
             
             lines.append(
                 f"#{warn_id} - {formatted_date}\n"
-                f"Reason: {reason}\n"
-                f"By: {admin_name}\n"
+                f"**Reason:** {reason}\n"
+                f"**By:** {admin_name}\n"
             )
         
         lines.append(f"\nTotal active warnings: {len(warnings)}")
@@ -293,7 +293,7 @@ async def warnslist_command(client: Client, message: types.Message):
             user_warnings[user_id].append((warn_id, warned_by, reason, warn_date))
         
         # Build response message
-        lines = [f"⚠️ All Active Warnings in {chat.title or 'this chat'}\n"]
+        lines = [f"**⚠️ All Active Warnings in {chat.title or 'this chat'}**\n"]
         
         for user_id, user_warns in user_warnings.items():
             # Get user info
@@ -303,7 +303,7 @@ async def warnslist_command(client: Client, message: types.Message):
             except:
                 user_name = f"User {user_id}"
             
-            lines.append(f"👤 {user_name} ({len(user_warns)} warnings):")
+            lines.append(f"👤 **{user_name}** ({len(user_warns)} warnings):")
             
             for warn_id, warned_by, reason, warn_date in user_warns[:3]:  # Show max 3 per user
                 # Format date
