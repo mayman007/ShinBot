@@ -26,6 +26,27 @@ async def start_command(client: Client, message: types.Message):
 async def help_command(client: Client, message: types.Message):
     chat = message.chat
     await save_usage(chat, "help")
+    
+    # Check if user wants moderation commands only
+    args = message.text.split()
+    if len(args) > 1 and args[1].lower() == "mod":
+        mod_help_text = (
+            "\nHere's my moderation commands list:\n"
+            "/ban - Ban a user\n"
+            "/demote - Demote a user from admin\n"
+            "/kick - Kick a user\n"
+            "/mute - Mute a user\n"
+            "/promote - Promote a user to admin\n"
+            "/unban - Unban a user\n"
+            "/unmute - Unmute a user\n"
+            "/warn - Issue a warning to a user\n"
+            "/warndel - Delete a warning by ID\n"
+            "/warnslist - List all active warnings in chat\n"
+            "/warnsuser - View warnings for a specific user\n"
+        )
+        await message.reply(mod_help_text)
+        return
+    
     help_text = (
         "\nHere's my commands list:\n"
         "/advice - Get a random advice\n"
