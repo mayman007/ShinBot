@@ -6,6 +6,7 @@ import asyncio
 from pyrogram import Client, types
 from tcp_latency import measure_latency
 from utils.usage import save_usage
+from utils.helpers import extract_user_and_reason
 
 # ---------------------------
 # Start command
@@ -296,48 +297,29 @@ async def pfp_command(client: Client, message: types.Message):
     chat = message.chat
     await save_usage(chat, "pfp")
     
-    # Determine target user (reply, argument, or sender)
-    target_user = None
-    if message.reply_to_message and message.reply_to_message.from_user:
-        target_user = message.reply_to_message.from_user
-    else:
-        args = message.text.split()
-        if len(args) > 1:
-            arg = args[1].strip()
-            # Remove '@' if present
-            if arg.startswith('@'):
-                arg = arg[1:]
-            try:
-                # Try as user ID first
-                user_id = int(arg)
-                target_user = await client.get_users(user_id)
-            except ValueError:
-                try:
-                    # Try as username
-                    target_user = await client.get_users(arg)
-                except Exception:
-                    await message.reply("Error: Unable to find a user with the provided identifier.")
-                    return
-        else:
-            # Use message sender
-            target_user = message.from_user
+    # Get target user using helper function
+    user, _ = await extract_user_and_reason(client, message)
     
-    if not target_user:
+    # If no user found from helper, use message sender as fallback
+    if not user:
+        user = message.from_user
+    
+    if not user:
         await message.reply("Error: No user found.")
         return
     
     try:
         # Get user's profile photos
-        photos = [photo async for photo in client.get_chat_photos(target_user.id)]
+        photos = [photo async for photo in client.get_chat_photos(user.id)]
         
         if not photos:
-            await message.reply(f"{target_user.first_name} doesn't have a profile picture.")
+            await message.reply(f"{user.first_name} doesn't have a profile picture.")
             return
         
         # Send the latest profile photo
         await message.reply_photo(
             photos[0].file_id,
-            caption=f"Profile picture of {target_user.first_name}"
+            caption=f"Profile picture of {user.first_name}"
         )
         
     except Exception as e:
@@ -350,9 +332,3 @@ async def chatid_command(client: Client, message: types.Message):
     chat = message.chat
     await save_usage(chat, "chatid")
     await message.reply(f"Chat ID: `{chat.id}`")
-# ---------------------------
-async def chatid_command(client: Client, message: types.Message):
-    chat = message.chat
-    await save_usage(chat, "chatid")
-    await message.reply(f"Chat ID: `{chat.id}`")
-
