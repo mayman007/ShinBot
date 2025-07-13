@@ -14,12 +14,21 @@ LOGGING_CONFIG = {
         "simple": {
             "format": "%(levelname)s - %(message)s"
         },
+        "library": {
+            "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        },
     },
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
             "level": "DEBUG" if DEBUG else "INFO",
             "formatter": "simple",
+            "stream": "ext://sys.stdout",
+        },
+        "console_library": {
+            "class": "logging.StreamHandler",
+            "level": "WARNING",  # Show warnings and errors from libraries
+            "formatter": "library",
             "stream": "ext://sys.stdout",
         },
         "file": {
@@ -33,19 +42,61 @@ LOGGING_CONFIG = {
         },
     },
     "root": {
-        "level": "DEBUG" if DEBUG else "INFO",
-        "handlers": ["console", "file"],
+        "level": "WARNING",  # Set to WARNING to catch library errors
+        "handlers": ["console_library", "file"],
     },
-    # Optionally, set levels for module-specific loggers
+    # Module-specific loggers
     "loggers": {
         "db": {
-            "level": "DEBUG" if DEBUG else "INFO",  # Updated to match other loggers
-            "handlers": ["file"],
+            "level": "DEBUG" if DEBUG else "INFO",
+            "handlers": ["console", "file"],
             "propagate": False,
         },
         "utils": {
             "level": "DEBUG" if DEBUG else "INFO",
-            "handlers": ["console"],
+            "handlers": ["console", "file"],
+            "propagate": False,
+        },
+        # Your bot's main modules
+        "handlers": {
+            "level": "DEBUG" if DEBUG else "INFO",
+            "handlers": ["console", "file"],
+            "propagate": False,
+        },
+        "__main__": {
+            "level": "DEBUG" if DEBUG else "INFO", 
+            "handlers": ["console", "file"],
+            "propagate": False,
+        },
+        # Third-party library loggers - show their errors/warnings
+        "pyrogram": {
+            "level": "WARNING",
+            "handlers": ["console_library", "file"],
+            "propagate": False,
+        },
+        "httpx": {
+            "level": "WARNING", 
+            "handlers": ["console_library", "file"],
+            "propagate": False,
+        },
+        "yt_dlp": {
+            "level": "WARNING",
+            "handlers": ["console_library", "file"], 
+            "propagate": False,
+        },
+        "aiosqlite": {
+            "level": "WARNING",
+            "handlers": ["console_library", "file"],
+            "propagate": False,
+        },
+        "asyncio": {
+            "level": "WARNING",
+            "handlers": ["console_library", "file"],
+            "propagate": False,
+        },
+        "telegram": {
+            "level": "WARNING",
+            "handlers": ["console_library", "file"],
             "propagate": False,
         },
     },

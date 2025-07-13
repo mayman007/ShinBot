@@ -1,6 +1,7 @@
 import os
 import logging.config
 import asyncio
+import sys
 from pyrogram import Client
 from utils.command_registry import register_handlers
 from utils.logger import LOGGING_CONFIG
@@ -8,6 +9,17 @@ from config import BOT_TOKEN, API_ID, API_HASH
 from handlers import check_pending_timers
 from handlers.moderation.warn_system import init_warns_db
 from handlers.moderation.mute_system import start_unmute_checker
+
+# Set up exception handler for unhandled exceptions
+def handle_exception(exc_type, exc_value, exc_traceback):
+    if issubclass(exc_type, KeyboardInterrupt):
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+    
+    logger = logging.getLogger(__name__)
+    logger.critical("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+
+sys.excepthook = handle_exception
 
 async def startup(client: Client):
     await check_pending_timers(client)
@@ -36,6 +48,10 @@ async def main():
 
     # Initialize logger
     logging.config.dictConfig(LOGGING_CONFIG)
+    
+    # Set asyncio logger to show errors
+    asyncio_logger = logging.getLogger('asyncio')
+    asyncio_logger.setLevel(logging.WARNING)
 
     # Initialize Pyrogram client for a bot.
     client = Client('bot_session', api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
@@ -54,7 +70,7 @@ if __name__ == '__main__':
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
         print("Bot stopped.")
-    try:
-        asyncio.run(main())
-    except (KeyboardInterrupt, SystemExit):
-        print("Bot stopped.")
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.critical(f"Fatal error: {e}", exc_info=True)
+        print(f"Fatal error: {e}")

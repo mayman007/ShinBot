@@ -309,21 +309,45 @@ async def pfp_command(client: Client, message: types.Message):
         return
     
     try:
-        # Get user's profile photos
-        photos = [photo async for photo in client.get_chat_photos(user.id)]
+        # First try to get the user's full info which includes profile photo
+        user_full = await client.get_users(user.id)
         
-        if not photos:
-            await message.reply(f"{user.first_name} doesn't have a profile picture.")
+        # Check if user has a profile photo
+        if not user_full.photo:
+            await message.reply(f"{user_full.first_name} doesn't have a profile picture or it's not accessible.")
             return
         
-        # Send the latest profile photo
-        await message.reply_photo(
-            photos[0].file_id,
-            caption=f"Profile picture of {user.first_name}"
-        )
+        # Try to download and send the profile photo
+        try:
+            # Get the profile photo file
+            photo_file = await client.download_media(user_full.photo.big_file_id, in_memory=True)
+            
+            # Send the photo
+            await message.reply_photo(
+                photo_file,
+                caption=f"Profile picture of {user_full.first_name}"
+            )
+            
+        except Exception as download_error:
+            # Fallback: try using get_chat_photos
+            try:
+                photos = [photo async for photo in client.get_chat_photos(user.id)]
+                
+                if not photos:
+                    await message.reply(f"{user_full.first_name} doesn't have a profile picture or it's not accessible.")
+                    return
+                
+                # Send the latest profile photo
+                await message.reply_photo(
+                    photos[0].file_id,
+                    caption=f"Profile picture of {user_full.first_name}"
+                )
+                
+            except Exception as fallback_error:
+                await message.reply(f"Error: Unable to access {user_full.first_name}'s profile picture. This might be due to privacy settings.")
         
     except Exception as e:
-        await message.reply(f"Error retrieving profile picture: {str(e)}")
+        await message.reply(f"Error retrieving user information: {str(e)}")
 
 # ---------------------------
 # Chat ID command
