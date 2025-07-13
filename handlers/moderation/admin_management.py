@@ -229,3 +229,59 @@ async def demote_user(client: Client, message: Message):
     except Exception as e:
         await message.reply(f"❌ Error demoting user: {str(e)}")
         logger.error(f"Error in demote command: {e}")
+
+@admin_only
+async def kick_user(client: Client, message: Message):
+    """Kick a user from the chat"""
+    try:
+        user, reason = await extract_user_and_reason(client, message)
+        if not user:
+            await message.reply("❌ Please specify a user to kick.\n**Usage:** `/kick @username [reason]` or reply to a message with `/kick [reason]`")
+            return
+        
+        # Check if trying to kick yourself
+        if user.id == message.from_user.id:
+            await message.reply("❌ You cannot kick yourself!")
+            return
+        
+        # Check if trying to kick the bot
+        me = await client.get_me()
+        if user.id == me.id:
+            await message.reply("❌ I cannot kick myself!")
+            return
+        
+        # Check if user is in the chat and their status
+        try:
+            member = await client.get_chat_member(message.chat.id, user.id)
+            
+            # Check if trying to kick an admin
+            status_str = str(member.status).lower()
+            if ('owner' in status_str or 'creator' in status_str or 
+                'administrator' in status_str or 'admin' in status_str):
+                await message.reply(f"❌ Cannot kick {user.first_name} - user is an admin.")
+                return
+                
+        except UserNotParticipant:
+            await message.reply(f"❌ {user.first_name} is not in this chat.")
+            return
+        
+        # Kick the user (ban then unban to allow rejoining)
+        await client.ban_chat_member(message.chat.id, user.id)
+        await client.unban_chat_member(message.chat.id, user.id)
+        
+        kick_text = f"👢 **User Kicked**\n"
+        kick_text += f"**User:** {user.mention}\n"
+        kick_text += f"**Admin:** {message.from_user.mention}\n"
+        if reason:
+            kick_text += f"**Reason:** {reason}"
+        
+        await message.reply(kick_text)
+        logger.info(f"User {user.id} kicked from chat {message.chat.id} by {message.from_user.id}")
+        
+    except ChatAdminRequired:
+        await message.reply("❌ I need admin privileges to kick users.")
+    except UserAdminInvalid:
+        await message.reply("❌ Cannot kick this user.")
+    except Exception as e:
+        await message.reply(f"❌ Error kicking user: {str(e)}")
+        logger.error(f"Error in kick command: {e}")

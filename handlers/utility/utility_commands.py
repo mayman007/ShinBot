@@ -48,6 +48,7 @@ async def help_command(client: Client, message: types.Message):
         "/help - This message\n"
         "/imagine - Generate AI images\n"
         "/joindate - Get each member's join date in the group\n"
+        "/kick - Kick a user\n"
         "/manga - Search Manga\n"
         "/meme - Get a random meme from Reddit\n"
         "/mute - Mute a user\n"

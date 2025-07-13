@@ -42,6 +42,7 @@ def register_handlers(client: Client):
     client.add_handler(MessageHandler(handlers.warnslist_command, filters.command("warnslist")))
     client.add_handler(MessageHandler(handlers.ban_user, filters.command("ban")))
     client.add_handler(MessageHandler(handlers.unban_user, filters.command("unban")))
+    client.add_handler(MessageHandler(handlers.kick_user, filters.command("kick")))
     client.add_handler(MessageHandler(handlers.promote_user, filters.command("promote")))
     client.add_handler(MessageHandler(handlers.demote_user, filters.command("demote")))
     if ENABLE_MEME_COMMAND: client.add_handler(MessageHandler(handlers.meme_command, filters.command("meme")))
@@ -58,7 +59,7 @@ def register_handlers(client: Client):
         "anime", "manga", "aghpb", "echo", "ping", "calc", "groupinfo", "pfp", "chatid", "timer",
         "timerslist", "timerdel", "reverse", "slot", "coinflip", "geekjoke", "dadjoke",
         "dog", "affirmation", "advice", "choose", "rps", "yt", "warn", "warndel", "warnsuser",
-        "warnslist", "ban", "unban", "mute", "unmute", "promote", "demote"
+        "warnslist", "ban", "unban", "kick", "mute", "unmute", "promote", "demote"
     ]
 
     # Add conditional commands to the list
