@@ -135,7 +135,6 @@ async def is_user_muted(client: Client, chat_id: int, user_id: int) -> bool:
             perms = member.permissions
             return not (perms.can_send_messages or 
                        perms.can_send_media_messages or 
-                       perms.can_send_other_messages or 
                        perms.can_add_web_page_previews)
         return False
     except:
