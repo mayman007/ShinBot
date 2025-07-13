@@ -116,14 +116,14 @@ async def check_pending_unmutes(client: Client):
 
 # Background task to check for pending unmutes
 async def unmute_checker_task(client: Client):
-    """Background task that runs every minute to check for pending unmutes."""
+    """Background task that runs every 10 seconds to check for pending unmutes."""
     while True:
         try:
             await check_pending_unmutes(client)
-            await asyncio.sleep(60)  # Check every minute
+            await asyncio.sleep(10)  # Check every 10 seconds for better accuracy
         except Exception as e:
             logger.error(f"Error in unmute checker task: {e}")
-            await asyncio.sleep(60)
+            await asyncio.sleep(10)
 
 async def is_user_muted(client: Client, chat_id: int, user_id: int) -> bool:
     """Check if a user is currently muted."""
@@ -172,21 +172,21 @@ async def mute_command(client: Client, message: types.Message):
             if time_match and duration is None:  # Only take first time found
                 amount = int(time_match.group(1))
                 unit = time_match.group(2)
-                if unit == 'h':
-                    duration = amount * 60  # hours to minutes
-                elif unit == 'd':
-                    duration = amount * 24 * 60  # days to minutes
+                if unit == 'd':
+                    duration = amount * 60 * 60 * 24
+                elif unit == 'h':
+                    duration = amount * 60 * 60
                 elif unit == 'm':
-                    duration = amount  # already in minutes
+                    duration = amount * 60
                 elif unit == 's':
-                    duration = amount / 60  # seconds to minutes
+                    duration = amount
             else:
                 reason_parts.append(arg)
     
     reason = ' '.join(reason_parts) if reason_parts else "No reason provided"
     
     # Calculate until when the user will be muted (None for infinite)
-    mute_until = None if duration is None else datetime.now() + timedelta(minutes=duration)
+    mute_until = None if duration is None else datetime.now() + timedelta(seconds=duration)
     
     try:
         # Apply mute restriction
@@ -212,22 +212,46 @@ async def mute_command(client: Client, message: types.Message):
         
         # Send confirmation message
         if duration is None:
-            mute_time_str = "indefinitely"
+            mute_time_str = "Indefinitely"
         else:
-            if duration >= 60:
-                hours = duration // 60
-                minutes = duration % 60
-                if hours > 0 and minutes > 0:
-                    mute_time_str = f"for {hours}h {minutes}m"
-                elif hours > 0:
-                    mute_time_str = f"for {hours}h"
-                else:
-                    mute_time_str = f"for {minutes}m"
-            elif duration < 1:
-                seconds = int(duration * 60)
-                mute_time_str = f"for {seconds}s"
+            if duration >= 86400:  # 1 day in seconds
+                days = duration // 86400
+                hours = (duration % 86400) // 3600
+                minutes = (duration % 3600) // 60
+                seconds = duration % 60
+                time_parts = []
+                if days > 0:
+                    time_parts.append(f"{days}d")
+                if hours > 0:
+                    time_parts.append(f"{hours}h")
+                if minutes > 0:
+                    time_parts.append(f"{minutes}m")
+                if seconds > 0:
+                    time_parts.append(f"{seconds}s")
+                mute_time_str = " ".join(time_parts)
+            elif duration >= 3600:  # 1 hour in seconds
+                hours = duration // 3600
+                minutes = (duration % 3600) // 60
+                seconds = duration % 60
+                time_parts = []
+                if hours > 0:
+                    time_parts.append(f"{hours}h")
+                if minutes > 0:
+                    time_parts.append(f"{minutes}m")
+                if seconds > 0:
+                    time_parts.append(f"{seconds}s")
+                mute_time_str = " ".join(time_parts)
+            elif duration >= 60:  # 1 minute in seconds
+                minutes = duration // 60
+                seconds = duration % 60
+                time_parts = []
+                if minutes > 0:
+                    time_parts.append(f"{minutes}m")
+                if seconds > 0:
+                    time_parts.append(f"{seconds}s")
+                mute_time_str = " ".join(time_parts)
             else:
-                mute_time_str = f"for {int(duration)}m"
+                mute_time_str = f"{duration}s"
         
         await message.reply_text(
             f"🔇 **User Muted**\n"
