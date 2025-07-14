@@ -1,5 +1,6 @@
 from .admin.usage import *
-from .ai.ai_commands import *
+from .ai.chat import *
+from .ai.image_generation import *
 from .anime.anime_commands import *
 from .anime.anime_callbacks import *
 from .moderation.mute_system import *
