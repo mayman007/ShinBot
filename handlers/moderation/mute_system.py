@@ -33,7 +33,6 @@ async def init_mute_db():
             except:
                 pass  # Column already exists
             await connection.commit()
-            logger.info("Mute schedules database initialized")
 
 async def schedule_unmute(chat_id: int, user_id: int, unmute_time: datetime, reason: str, muted_by: int, mute_message_id: int = None):
     """Schedule an automatic unmute."""
