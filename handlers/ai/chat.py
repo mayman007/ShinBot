@@ -19,16 +19,15 @@ async def gemini_command(client: Client, message: types.Message):
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel(GEMINI_MODEL)
         response = await model.generate_content_async(prompt)
-        print(response)
         response_text = response.text
         limit = 4000
         if len(response_text) > limit:
             parts = [response_text[i: i + limit] for i in range(0, len(response_text), limit)]
             for part in parts:
-                await message.reply(f"Gemini Pro: {part}")
+                await message.reply(f"**{GEMINI_MODEL.title()}:** {part}")
                 await asyncio.sleep(0.5)
         else:
-            await message.reply(f"Gemini Pro: {response_text}")
+            await message.reply(f"**{GEMINI_MODEL.title()}:** {response_text}")
     except Exception as e:
         print(f"Gemini error: {e}")
         await message.reply("Sorry, an unexpected error had occured.")
