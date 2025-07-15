@@ -5,6 +5,8 @@ from datetime import datetime
 from pyrogram import Client, types
 from utils.usage import save_usage
 from utils.helpers import extract_user_and_reason
+import os
+import tempfile
 
 async def groupinfo_command(client: Client, message: Message):
     """Display comprehensive information about the current group chat."""
@@ -276,7 +278,13 @@ async def list_join_dates(client: Client, message: types.Message):
     else:
         # Get all members and their join dates
         members = []
+        member_count = 0
+        max_members_for_file = 1000
+        
         async for member in client.get_chat_members(chat.id):
+            if member_count >= max_members_for_file:
+                break
+                
             user = member.user
             join_date = None
             if hasattr(member, 'joined_date') and member.joined_date:
@@ -288,8 +296,6 @@ async def list_join_dates(client: Client, message: types.Message):
             name = user.first_name or ""
             if user.last_name:
                 name += " " + user.last_name
-            if len(name) > 20:
-                name = name[:17] + "..."
             
             members.append({
                 'name': name,
@@ -297,20 +303,100 @@ async def list_join_dates(client: Client, message: types.Message):
                 'join_date': join_date,
                 'join_date_str': join_date_str
             })
+            member_count += 1
 
-        # Sort members by join date
-        members.sort(key=lambda m: m['join_date'] if m['join_date'] is not None else datetime.datetime.max)
+        # Sort members by join date (earliest first)
+        members.sort(key=lambda m: m['join_date'] if m['join_date'] is not None else datetime.max)
 
-        # Build formatted output
-        output_lines = []
-        for m in members:
-            output_lines.append(f"Name: {m['name']}")
-            output_lines.append(f"ID: {m['id']}")
-            output_lines.append(f"Join Date: {m['join_date_str']}")
-            output_lines.append("-" * 30)
-        output_lines.append(f"Total Members: {len(members)}")
-        output = "\n".join(output_lines)
-        await message.reply(output)
+        # Display limit for inline message
+        display_limit = 2
+        
+        if len(members) <= display_limit:
+            # Small group - show all members inline
+            output_lines = []
+            for m in members:
+                name_display = m['name'][:20] + "..." if len(m['name']) > 20 else m['name']
+                output_lines.append(f"Name: {name_display}")
+                output_lines.append(f"ID: {m['id']}")
+                output_lines.append(f"Join Date: {m['join_date_str']}")
+                output_lines.append("-" * 30)
+            output_lines.append(f"Total Members: {len(members)}")
+            output = "\n".join(output_lines)
+            await message.reply(output)
+        else:
+            # Large group - create file and show summary
+            try:
+                # Create temporary file
+                with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt', encoding='utf-8') as f:
+                    f.write(f"Join Dates for {chat.title}\n")
+                    f.write(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                    f.write("=" * 50 + "\n\n")
+                    
+                    for i, m in enumerate(members, 1):
+                        f.write(f"{i}. Name: {m['name']}\n")
+                        f.write(f"   ID: {m['id']}\n")
+                        f.write(f"   Join Date: {m['join_date_str']}\n")
+                        f.write("-" * 40 + "\n")
+                    
+                    f.write(f"\nTotal Members Listed: {len(members)}")
+                    if member_count >= max_members_for_file:
+                        f.write(f"\n(Limited to first {max_members_for_file} members)")
+                    
+                    temp_file_path = f.name
+
+                # Show first few members inline
+                preview_lines = []
+                preview_lines.append(f"📊 **Join Dates Summary**\n")
+                preview_lines.append(f"**First {min(display_limit, len(members))} members:**\n")
+                
+                for i, m in enumerate(members[:display_limit]):
+                    name_display = m['name'][:15] + "..." if len(m['name']) > 15 else m['name']
+                    preview_lines.append(f"{i+1}. {name_display} - {m['join_date_str']}")
+                
+                if len(members) > display_limit:
+                    preview_lines.append(f"\n... and {len(members) - display_limit} more members")
+                
+                preview_lines.append(f"\n**Total Members:** {len(members)}")
+                if member_count >= max_members_for_file:
+                    preview_lines.append(f"*(Limited to first {max_members_for_file} members)*")
+                
+                preview_lines.append(f"\n📄 Complete list sent as file below:")
+                
+                preview_text = "\n".join(preview_lines)
+                
+                # Send preview message
+                await message.reply(preview_text)
+                
+                # Send file
+                file_caption = f"Complete join dates for {chat.title}"
+                if len(file_caption) > 50:
+                    file_caption = file_caption[:47] + "..."
+                
+                await message.reply_document(
+                    document=temp_file_path,
+                    caption=file_caption
+                )
+                
+                # Clean up temporary file
+                os.unlink(temp_file_path)
+                
+            except Exception as e:
+                # Fallback to truncated inline display
+                output_lines = []
+                output_lines.append(f"⚠️ Error creating file. Showing first {display_limit} members:\n")
+                
+                for i, m in enumerate(members[:display_limit]):
+                    name_display = m['name'][:20] + "..." if len(m['name']) > 20 else m['name']
+                    output_lines.append(f"{i+1}. {name_display}")
+                    output_lines.append(f"   ID: {m['id']}")
+                    output_lines.append(f"   Join Date: {m['join_date_str']}")
+                    output_lines.append("-" * 25)
+                
+                output_lines.append(f"\nTotal Members: {len(members)} (showing first {display_limit})")
+                output_lines.append(f"Error details: {str(e)}")
+                
+                output = "\n".join(output_lines)
+                await message.reply(output)
 
 
 # ---------------------------
