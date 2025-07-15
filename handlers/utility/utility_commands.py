@@ -5,6 +5,7 @@ import asyncio
 from pyrogram import Client, types
 from tcp_latency import measure_latency
 from utils.usage import save_usage
+from config import FEEDBACK_CHAT_ID
 
 # ---------------------------
 # Start command
@@ -61,6 +62,7 @@ async def help_command(client: Client, message: types.Message):
         "/demote - Demote a user from admin\n"
         "/dog - Get a random dog pic/vid/gif\n"
         "/echo - Repeats your words\n"
+        "/feedback - Send feedback to developers\n"
         "/geekjoke - Get a random geek joke\n"
         "/gemini - Chat with Google's Gemini Pro AI\n"
         "/groupinfo - Get group's info\n"
@@ -207,3 +209,43 @@ async def calc_command(client: Client, message: types.Message):
         await message.reply(f"Error: Invalid expression. {str(e)}")
     except Exception as e:
         await message.reply(f"Error: {str(e)}")
+
+# ---------------------------
+# Feedback command
+# ---------------------------
+async def feedback_command(client: Client, message: types.Message):
+    chat = message.chat
+    await save_usage(chat, "feedback")
+    
+    args = message.text.split(maxsplit=1)
+    if len(args) < 2:
+        await message.reply("Usage: /feedback <your message>\nExample: /feedback Great bot! Could you add more features?")
+        return
+    
+    feedback_text = args[1].strip()
+    
+    # Limit feedback length
+    if len(feedback_text) > 1000:
+        await message.reply("Error: Feedback message too long (max 1000 characters)")
+        return
+    
+    try:
+        sender = message.from_user
+        chat_info = f"Group: {chat.title}" if chat.type != "private" else "Private Chat"
+        
+        feedback_message = (
+            f"📝 **New Feedback**\n\n"
+            f"**From:** {sender.first_name}"
+            f"{' ' + sender.last_name if sender.last_name else ''} "
+            f"(@{sender.username if sender.username else 'No username'})\n"
+            f"**User ID:** `{sender.id}`\n"
+            f"**Chat:** {chat_info}\n"
+            f"**Chat ID:** `{chat.id}`\n\n"
+            f"**Message:**\n{feedback_text}"
+        )
+        
+        await client.send_message(FEEDBACK_CHAT_ID, feedback_message)
+        await message.reply("✅ Thank you for your feedback! Your message has been sent to the developers.")
+        
+    except Exception as e:
+        await message.reply(f"❌ Error sending feedback: {str(e)}")
