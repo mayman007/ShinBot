@@ -2,6 +2,7 @@ from pyrogram import filters, Client
 from pyrogram.handlers import MessageHandler, CallbackQueryHandler
 from config import ENABLE_GEMINI_COMMAND, ENABLE_IMAGINE_COMMAND, ENABLE_MEME_COMMAND
 import handlers as handlers
+from handlers.callback_handlers import button_click_handler
 
 
 # Register command handlers
@@ -20,6 +21,7 @@ def register_handlers(client: Client):
     client.add_handler(MessageHandler(handlers.echo_command, filters.command("echo")))
     client.add_handler(MessageHandler(handlers.ping_command, filters.command("ping")))
     client.add_handler(MessageHandler(handlers.feedback_command, filters.command("feedback")))
+    client.add_handler(MessageHandler(handlers.search_command, filters.command("search")))
     client.add_handler(MessageHandler(handlers.chatid_command, filters.command("chatid")))
     client.add_handler(MessageHandler(handlers.pfp_command, filters.command("pfp")))
     client.add_handler(MessageHandler(handlers.chatpfp_command, filters.command("chatpfp")))
@@ -48,18 +50,15 @@ def register_handlers(client: Client):
     client.add_handler(MessageHandler(handlers.kick_user, filters.command("kick")))
     client.add_handler(MessageHandler(handlers.promote_user, filters.command("promote")))
     client.add_handler(MessageHandler(handlers.demote_user, filters.command("demote")))
+    client.add_handler(MessageHandler(handlers.yt_command, filters.command("yt")))
     if ENABLE_MEME_COMMAND: client.add_handler(MessageHandler(handlers.meme_command, filters.command("meme")))
     if ENABLE_GEMINI_COMMAND: client.add_handler(MessageHandler(handlers.gemini_command, filters.command("gemini")))
     if ENABLE_IMAGINE_COMMAND: client.add_handler(MessageHandler(handlers.imagine_command, filters.command("imagine")))
 
-
-    # YouTube command handlers
-    handlers.register_yt_handlers(client)  # Use the proper registration function
-
     # Register a handler for text messages that are not commands
     all_commands = [
         "start", "help", "mute", "unmute", "joindate", "usagedata", "character", "anime","manga", "aghpb",
-        "echo", "ping", "feedback", "calc", "groupinfo", "pfp", "chatpfp", "chatid", "timer",
+        "echo", "ping", "search", "feedback", "calc", "groupinfo", "pfp", "chatpfp", "chatid", "timer",
         "timerslist", "timerdel", "reverse", "slot", "coinflip", "geekjoke", "dadjoke",
         "dog", "cat", "affirmation", "advice", "choose", "rps", "yt", "warn", "warndel", "warnsuser",
         "warnslist", "ban", "unban", "kick", "mute", "unmute", "promote", "demote"
@@ -81,4 +80,4 @@ def register_handlers(client: Client):
     )
 
     # Register a callback query handler for button clicks
-    client.add_handler(CallbackQueryHandler(handlers.button_click_handler))
+    client.add_handler(CallbackQueryHandler(button_click_handler))
