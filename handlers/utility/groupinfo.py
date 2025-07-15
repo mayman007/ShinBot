@@ -1,8 +1,10 @@
 from pyrogram import Client
 from pyrogram.types import Message
 from pyrogram.enums import ChatType, ChatMemberStatus
-import asyncio
-from datetime import datetime, timezone
+from datetime import datetime
+from pyrogram import Client, types
+from utils.usage import save_usage
+from utils.helpers import extract_user_and_reason
 
 async def groupinfo_command(client: Client, message: Message):
     """Display comprehensive information about the current group chat."""
@@ -197,3 +199,183 @@ async def groupinfo_command(client: Client, message: Message):
         
     except Exception as e:
         await message.reply_text(f"❌ Error retrieving group information: {str(e)}")
+
+
+# ---------------------------
+# Joindate command
+# ---------------------------
+async def list_join_dates(client: Client, message: types.Message):
+    chat = message.chat
+    await save_usage(chat, "joindate")
+    # This command must be used in a group or supergroup.
+    if str(chat.type) not in ["ChatType.SUPERGROUP", "ChatType.GROUP"]:
+        await message.reply(f"This command can only be used in groups. Current chat type: {chat.type}")
+        return
+
+    # Check bot's admin permissions
+    try:
+        me = await client.get_me()
+        perms = await client.get_chat_member(chat.id, me.id)
+        
+        # Check if bot has admin permissions
+        bot_status = str(perms.status) if hasattr(perms, 'status') else str(perms)
+        allowed_statuses = ['ChatMemberStatus.ADMINISTRATOR', 'ChatMemberStatus.CREATOR', 'administrator', 'creator']
+        
+        if not any(status in bot_status for status in allowed_statuses):
+            await message.reply(f"Error: Bot doesn't have the necessary admin permissions. Current status: {bot_status}")
+            return
+            
+    except Exception as e:
+        await message.reply(f"Error: Unable to fetch bot permissions. Error: {str(e)}")
+        return
+
+    # Determine if a specific member is targeted (by reply or argument)
+    target_user = None
+    if message.reply_to_message:
+        try:
+            target_user = message.reply_to_message.from_user.id
+        except Exception:
+            pass
+    else:
+        args = message.text.split()
+        if len(args) > 1:
+            arg = args[1].strip()
+            # If the identifier starts with '@', remove it.
+            if arg.startswith('@'):
+                arg = arg[1:]
+            # Try to interpret the argument as an integer user ID.
+            try:
+                target_user = int(arg)
+            except ValueError:
+                try:
+                    # Fallback: resolve using get_users
+                    entity = await client.get_users(arg)
+                    target_user = entity.id
+                except Exception:
+                    await message.reply("Error: Unable to find a user with the provided identifier.")
+                    return
+
+    if target_user is not None:
+        # Get specific user's details
+        try:
+            participant = await client.get_chat_member(chat.id, target_user)
+            user = participant.user
+            
+            join_date = "Not Available"
+            if hasattr(participant, 'joined_date') and participant.joined_date:
+                join_date = participant.joined_date.strftime('%Y-%m-%d %H:%M:%S')
+            
+            name = user.first_name or ""
+            if user.last_name:
+                name += " " + user.last_name
+            result = f"Name: {name}\nID: {user.id}\nJoin Date: {join_date}"
+            await message.reply(result)
+        except Exception:
+            await message.reply("Error: Unable to retrieve the specified user's details.")
+            return
+    else:
+        # Get all members and their join dates
+        members = []
+        async for member in client.get_chat_members(chat.id):
+            user = member.user
+            join_date = None
+            if hasattr(member, 'joined_date') and member.joined_date:
+                join_date = member.joined_date
+                join_date_str = join_date.strftime('%Y-%m-%d %H:%M:%S')
+            else:
+                join_date_str = "Not Available"
+            
+            name = user.first_name or ""
+            if user.last_name:
+                name += " " + user.last_name
+            if len(name) > 20:
+                name = name[:17] + "..."
+            
+            members.append({
+                'name': name,
+                'id': user.id,
+                'join_date': join_date,
+                'join_date_str': join_date_str
+            })
+
+        # Sort members by join date
+        members.sort(key=lambda m: m['join_date'] if m['join_date'] is not None else datetime.datetime.max)
+
+        # Build formatted output
+        output_lines = []
+        for m in members:
+            output_lines.append(f"Name: {m['name']}")
+            output_lines.append(f"ID: {m['id']}")
+            output_lines.append(f"Join Date: {m['join_date_str']}")
+            output_lines.append("-" * 30)
+        output_lines.append(f"Total Members: {len(members)}")
+        output = "\n".join(output_lines)
+        await message.reply(output)
+
+
+# ---------------------------
+# Profile Picture command
+# ---------------------------
+async def pfp_command(client: Client, message: types.Message):
+    chat = message.chat
+    await save_usage(chat, "pfp")
+    
+    # Get target user using helper function
+    user, _ = await extract_user_and_reason(client, message)
+    
+    # If no user found from helper, use message sender as fallback
+    if not user:
+        user = message.from_user
+    
+    if not user:
+        await message.reply("Error: No user found.")
+        return
+    
+    try:
+        # First try to get the user's full info which includes profile photo
+        user_full = await client.get_users(user.id)
+        
+        # Check if user has a profile photo
+        if not user_full.photo:
+            await message.reply(f"{user_full.first_name} doesn't have a profile picture or it's not accessible.")
+            return
+        
+        # Try to download and send the profile photo
+        try:
+            # Get the profile photo file
+            photo_file = await client.download_media(user_full.photo.big_file_id, in_memory=True)
+            
+            # Send the photo
+            await message.reply_photo(
+                photo_file,
+                caption=f"Profile picture of {user_full.first_name}"
+            )
+            
+        except Exception as download_error:
+            # Fallback: try using get_chat_photos
+            try:
+                photos = [photo async for photo in client.get_chat_photos(user.id)]
+                
+                if not photos:
+                    await message.reply(f"{user_full.first_name} doesn't have a profile picture or it's not accessible.")
+                    return
+                
+                # Send the latest profile photo
+                await message.reply_photo(
+                    photos[0].file_id,
+                    caption=f"Profile picture of {user_full.first_name}"
+                )
+                
+            except Exception as fallback_error:
+                await message.reply(f"Error: Unable to access {user_full.first_name}'s profile picture. This might be due to privacy settings.")
+        
+    except Exception as e:
+        await message.reply(f"Error retrieving user information: {str(e)}")
+
+# ---------------------------
+# Chat ID command
+# ---------------------------
+async def chatid_command(client: Client, message: types.Message):
+    chat = message.chat
+    await save_usage(chat, "chatid")
+    await message.reply(f"Chat ID: `{chat.id}`")
