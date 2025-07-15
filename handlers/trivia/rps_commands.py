@@ -1,7 +1,6 @@
 import random
 import time
 from pyrogram import Client, types
-from pyrogram import filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from pyrogram.errors import FloodWait
 from utils.usage import save_usage
@@ -390,12 +389,3 @@ async def rps_play_again_callback(client: Client, callback_query):
         return
     
     active_games[message_id] = new_game_data
-
-def register_rps_handlers(client: Client):
-    """Register RPS callback handlers with the client."""
-    from pyrogram.handlers import CallbackQueryHandler
-    
-    client.add_handler(CallbackQueryHandler(
-        rps_callback_handler, 
-        filters.regex(r"^rps_")
-    ))

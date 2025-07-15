@@ -2,7 +2,6 @@ from .admin.usage import *
 from .ai.chat import *
 from .ai.image_generation import *
 from .anime.anime_commands import *
-from .anime.anime_callbacks import *
 from .moderation.mute_system import *
 from .moderation.warn_system import *
 from .moderation.ban_system import *
@@ -15,3 +14,4 @@ from .utility.utility_commands import *
 from .utility.groupinfo import *
 from .yt.yt_commands import *
 from .trivia.rps_commands import *
+from .callback_handlers import *

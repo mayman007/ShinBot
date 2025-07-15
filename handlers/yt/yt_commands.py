@@ -1401,11 +1401,3 @@ async def is_admin_or_owner(client: Client, user_id):
         
     # Always return False if no admin IDs are defined or user is not an admin
     return False
-
-# Function to register all handlers
-def register_yt_handlers(client: Client):
-    """Register all YouTube download handlers with the Pyrogram client."""
-    client.add_handler(MessageHandler(yt_command, filters.command("yt")))
-    client.add_handler(CallbackQueryHandler(yt_quality_button, filters.regex(r'yt_\d+$')))
-    client.add_handler(CallbackQueryHandler(yt_audio_button, filters.regex(r'yt_audio_\d+$')))
-    client.add_handler(CallbackQueryHandler(yt_subs_callback, filters.regex(r'subs_')))
