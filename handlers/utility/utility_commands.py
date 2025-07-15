@@ -278,17 +278,24 @@ async def search_command(client: Client, message: types.Message):
     
     status_msg = await message.reply("🔍 Searching...")
 
+    search_engine = None
+    all_results = []
+    
     # Try DuckDuckGo first
     try:
         all_results = await search_duckduckgo(search_query)
-        if not all_results:
+        if all_results:
+            search_engine = "DuckDuckGo"
+        else:
             raise Exception("No results from DuckDuckGo")
     except Exception as e:
         print(f"DuckDuckGo search failed: {e}")
         # Fallback to Bing search
         try:
             all_results = await search_bing(search_query)
-            if not all_results:
+            if all_results:
+                search_engine = "Bing"
+            else:
                 raise Exception("No results from Bing")
         except Exception as e:
             print(f"Bing search failed: {e}")
@@ -304,6 +311,7 @@ async def search_command(client: Client, message: types.Message):
     search_cache[cache_key] = {
         'query': search_query,
         'results': all_results,
+        'search_engine': search_engine,
         'total_pages': (len(all_results) + 4) // 5  # 5 results per page
     }
     
@@ -319,6 +327,7 @@ async def show_search_page(message, cache_key, page):
     results = data['results']
     total_pages = data['total_pages']
     query = data['query']
+    search_engine = data['search_engine']
     
     # Calculate start and end indices
     start_idx = (page - 1) * 5
@@ -327,6 +336,7 @@ async def show_search_page(message, cache_key, page):
     
     # Build reply text
     reply_text = f"🔍 **Search results for:** {query}\n"
+    reply_text += f"🌐 **Engine:** {search_engine}\n"
     reply_text += f"📄 Page {page} of {total_pages}\n\n"
     reply_text += "\n\n".join(page_results)
     
@@ -377,7 +387,8 @@ async def handle_search_callback(client: Client, callback_query):
         # Clean up cache
         if cache_key in search_cache:
             del search_cache[cache_key]
-        await callback_query.message.delete()
+        # Edit message instead of deleting
+        await callback_query.message.edit_text("🔍 Search closed.")
         await callback_query.answer("Search closed")
     
     elif data == "search_info":
