@@ -400,6 +400,15 @@ async def list_join_dates(client: Client, message: types.Message):
 
 
 # ---------------------------
+# Chat ID command
+# ---------------------------
+async def chatid_command(client: Client, message: types.Message):
+    chat = message.chat
+    await save_usage(chat, "chatid")
+    await message.reply(f"Chat ID: `{chat.id}`")
+
+
+# ---------------------------
 # Profile Picture command
 # ---------------------------
 async def pfp_command(client: Client, message: types.Message):
@@ -459,9 +468,53 @@ async def pfp_command(client: Client, message: types.Message):
         await message.reply(f"Error retrieving user information: {str(e)}")
 
 # ---------------------------
-# Chat ID command
+# Chat Profile Picture command
 # ---------------------------
-async def chatid_command(client: Client, message: types.Message):
+async def chatpfp_command(client: Client, message: types.Message):
     chat = message.chat
-    await save_usage(chat, "chatid")
-    await message.reply(f"Chat ID: `{chat.id}`")
+    await save_usage(chat, "chatpfp")
+    
+    # Check if it's a private chat
+    if chat.type == ChatType.PRIVATE:
+        await message.reply("❌ This command is for group chats. Use /pfp for user profile pictures.")
+        return
+    
+    try:
+        # Get the chat's full information
+        full_chat = await client.get_chat(chat.id)
+        
+        # Check if chat has a profile photo
+        if not full_chat.photo:
+            await message.reply(f"This chat doesn't have a profile picture set.")
+            return
+        
+        try:
+            # Try to download and send the chat profile photo
+            photo_file = await client.download_media(full_chat.photo.big_file_id, in_memory=True)
+            
+            # Send the photo
+            await message.reply_photo(
+                photo_file,
+                caption=f"Profile picture of {chat.title}"
+            )
+            
+        except Exception as download_error:
+            # Fallback: try using get_chat_photos
+            try:
+                photos = [photo async for photo in client.get_chat_photos(chat.id)]
+                
+                if not photos:
+                    await message.reply(f"This chat doesn't have a profile picture or it's not accessible.")
+                    return
+                
+                # Send the latest chat profile photo
+                await message.reply_photo(
+                    photos[0].file_id,
+                    caption=f"Profile picture of {chat.title}"
+                )
+                
+            except Exception as fallback_error:
+                await message.reply(f"Error: Unable to access this chat's profile picture. This might be due to permissions or the picture being removed.")
+        
+    except Exception as e:
+        await message.reply(f"Error retrieving chat information: {str(e)}")
