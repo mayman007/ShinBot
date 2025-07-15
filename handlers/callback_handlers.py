@@ -3,7 +3,7 @@ from handlers.utility.utility_commands import handle_search_callback
 from handlers.trivia.rps_commands import rps_callback_handler
 from handlers.yt.yt_commands import yt_quality_button, yt_audio_button, yt_subs_callback, ignore_callback
 from handlers.anime.anime_commands import handle_anime_callback
-from handlers.anime.anime_commands import handle_manga_callback
+from handlers.anime.manga_commands import handle_manga_callback
 
 
 # ---------- General Callback Query Handler ----------

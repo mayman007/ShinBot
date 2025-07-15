@@ -2,6 +2,7 @@ from .admin.usage import *
 from .ai.chat import *
 from .ai.image_generation import *
 from .anime.anime_commands import *
+from .anime.manga_commands import *
 from .moderation.mute_system import *
 from .moderation.warn_system import *
 from .moderation.ban_system import *
