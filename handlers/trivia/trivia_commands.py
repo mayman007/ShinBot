@@ -162,6 +162,37 @@ async def dog_command(client: Client, message: types.Message):
         await message.reply(f"Error fetching dog image: {str(e)}")
 
 # ---------------------------
+# Cat Command Handler
+# ---------------------------
+async def cat_command(client: Client, message: types.Message):
+    chat = message.chat
+    await save_usage(chat, "cat")
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get("https://api.thecatapi.com/v1/images/search") as response:
+                if response.status == 200:
+                    data = await response.json()
+                    cat_url = data[0].get('url', '')
+
+                    if not cat_url:
+                        await message.reply("Couldn't fetch a cat image. Try again later.")
+                        return
+
+                    if cat_url.endswith((".mp4", ".webm")):
+                        await client.send_video(chat.id, cat_url, supports_streaming=True)
+                    elif cat_url.endswith((".jpg", ".jpeg", ".png")):
+                        await client.send_photo(chat.id, cat_url)
+                    elif cat_url.endswith(".gif"):
+                        await client.send_animation(chat.id, cat_url)
+                    else:
+                        await message.reply(f"Unsupported file type: {cat_url}")
+                else:
+                    await message.reply(f"API Error: Status {response.status}")
+    except Exception as e:
+        await message.reply(f"Error fetching cat image: {str(e)}")
+
+# ---------------------------
 # Affirmation Command Handler
 # ---------------------------
 async def affirmation_command(client: Client, message: types.Message):

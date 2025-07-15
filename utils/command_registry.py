@@ -36,6 +36,7 @@ def register_handlers(client: Client):
     client.add_handler(MessageHandler(handlers.geekjoke_command, filters.command("geekjoke")))
     client.add_handler(MessageHandler(handlers.dadjoke_command, filters.command("dadjoke")))
     client.add_handler(MessageHandler(handlers.dog_command, filters.command("dog")))
+    client.add_handler(MessageHandler(handlers.cat_command, filters.command("cat")))
     client.add_handler(MessageHandler(handlers.affirmation_command, filters.command("affirmation")))
     client.add_handler(MessageHandler(handlers.advice_command, filters.command("advice")))
     client.add_handler(MessageHandler(handlers.warn_command, filters.command("warn")))
@@ -57,10 +58,10 @@ def register_handlers(client: Client):
 
     # Register a handler for text messages that are not commands
     all_commands = [
-        "start", "help", "mute", "unmute", "joindate", "usagedata", "character",
-        "anime", "manga", "aghpb", "echo", "ping", "feedback", "calc", "groupinfo", "pfp", "chatpfp", "chatid", "timer",
+        "start", "help", "mute", "unmute", "joindate", "usagedata", "character", "anime","manga", "aghpb",
+        "echo", "ping", "feedback", "calc", "groupinfo", "pfp", "chatpfp", "chatid", "timer",
         "timerslist", "timerdel", "reverse", "slot", "coinflip", "geekjoke", "dadjoke",
-        "dog", "affirmation", "advice", "choose", "rps", "yt", "warn", "warndel", "warnsuser",
+        "dog", "cat", "affirmation", "advice", "choose", "rps", "yt", "warn", "warndel", "warnsuser",
         "warnslist", "ban", "unban", "kick", "mute", "unmute", "promote", "demote"
     ]
 
