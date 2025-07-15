@@ -99,21 +99,30 @@ async def ping_command(client: Client, message: types.Message):
     await save_usage(chat, "ping")
     
     try:
-        initial_latency = measure_latency(host='telegram.org')
-        if not initial_latency or len(initial_latency) == 0:
-            initial_latency_ms = "Failed to measure"
-        else:
-            initial_latency_ms = f"{int(initial_latency[0])}ms"
-            
+        # Measure bot response time (message processing + API call)
         start_time = time.time()
-        sent_message = await message.reply("...")
-        end_time = time.time()
-        round_latency = int((end_time - start_time) * 1000)
+        sent_message = await message.reply("🏓 Measuring...")
+        bot_response_time = int((time.time() - start_time) * 1000)
+        
+        # Measure network latency to Telegram servers
+        try:
+            telegram_latency = measure_latency(host='149.154.167.50', port=443, timeout=5)  # Telegram server IP
+            if not telegram_latency or len(telegram_latency) == 0:
+                network_latency_ms = "Failed"
+            else:
+                network_latency_ms = f"{int(telegram_latency[0])}ms"
+        except:
+            network_latency_ms = "Failed"
+        
+        # Final result
         await sent_message.edit_text(
-            f"Pong!\nInitial response: `{initial_latency_ms}`\nRound-trip: `{round_latency}ms`"
+            f"🏓 **Pong!**\n\n"
+            f"**Bot Response:** `{bot_response_time}ms`\n"
+            f"**Network:** `{network_latency_ms}`"
         )
+        
     except Exception as e:
-        await message.reply(f"Error measuring latency: {str(e)}")
+        await message.reply(f"❌ Error measuring latency: {str(e)}")
 
 # ---------------------------
 # Calculator command
