@@ -5,7 +5,7 @@ import sys
 from pyrogram import Client
 from utils.command_registry import register_handlers
 from utils.logger import LOGGING_CONFIG
-from config import BOT_TOKEN, API_ID, API_HASH
+from config import BOT_TOKEN, API_ID, API_HASH, BOT_USERNAME
 from handlers import check_pending_timers
 from handlers.moderation.warn_system import init_warns_db
 from handlers.moderation.mute_system import start_unmute_checker
@@ -54,7 +54,7 @@ async def main():
     asyncio_logger.setLevel(logging.WARNING)
 
     # Initialize Pyrogram client for a bot.
-    client = Client('bot_session', api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+    client = Client(f'{BOT_USERNAME}_session', api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
     # Register command handlers
     register_handlers(client)
