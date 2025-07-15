@@ -4,6 +4,8 @@ API_ID: YOUR_API_ID # API ID
 API_HASH: "YOU_API_HASH" # API Hash
 BOT_USERNAME: "YOUR_BOT_USERNAME" # Bot username (without the "@")
 ADMIN_IDS: [YOUR_ADMIN_IDs] # Telegram user IDs for bot administrator
+FEEDBACK_CHAT_ID: -1234567890 # Feedback will be sent to this chat (include the "-" sign if it exists)
+
 
 # Optional settings
 DEBUG: false

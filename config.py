@@ -9,6 +9,7 @@ with open("settings.yaml", "r") as file:
     API_HASH = config.get("API_HASH")
     BOT_USERNAME = config.get("BOT_USERNAME")
     ADMIN_IDS = config.get("ADMIN_IDS")
+    FEEDBACK_CHAT_ID = config.get("FEEDBACK_CHAT_ID")
     GEMINI_API_KEY = config.get("GEMINI_API_KEY")
     GEMINI_MODEL = config.get("GEMINI_MODEL")
     HUGGINGFACE_TOKEN = config.get("HUGGINGFACE_TOKEN")
