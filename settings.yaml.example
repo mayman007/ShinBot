@@ -16,6 +16,7 @@ DEBUG: false
 ENABLE_GEMINI_COMMAND: false
 ENABLE_IMAGINE_COMMAND: false
 ENABLE_MEME_COMMAND: false
+ENABLE_TRIVIA_EVENTS: false
 
 # Fill each of these if you enabled their respective settings above
 GEMINI_API_KEY: "YOUR_GEMINI_API_KEY" # Get from: https://makersuite.google.com/app/apikey

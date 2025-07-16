@@ -21,3 +21,4 @@ with open("settings.yaml", "r") as file:
     ENABLE_GEMINI_COMMAND = config.get("ENABLE_GEMINI_COMMAND")
     ENABLE_IMAGINE_COMMAND = config.get("ENABLE_IMAGINE_COMMAND")
     ENABLE_MEME_COMMAND = config.get("ENABLE_MEME_COMMAND")
+    ENABLE_TRIVIA_EVENTS = config.get("ENABLE_TRIVIA_EVENTS")

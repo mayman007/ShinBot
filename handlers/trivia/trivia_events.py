@@ -1,7 +1,12 @@
 import random
 from pyrogram import Client, types
+from config import ENABLE_TRIVIA_EVENTS
 
 async def message_event(client: Client, message: types.Message):
+    # Check if trivia events are enabled
+    if not ENABLE_TRIVIA_EVENTS:
+        return
+
     # Ensure the message and its text exist
     if not message or not message.text:
         return
