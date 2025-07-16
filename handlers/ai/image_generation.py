@@ -39,7 +39,7 @@ async def imagine_command(client: Client, message: types.Message):
         
         file = io.BytesIO(image_bytes)
         file.name = "image.png"
-        await client.send_photo(chat.id, file)
+        await message.reply_photo(file)
         await waiting_msg.delete()
     except Exception as e:
         print(f"Imagine Error: {e}")

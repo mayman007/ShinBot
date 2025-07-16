@@ -148,12 +148,12 @@ async def dog_command(client: Client, message: types.Message):
                         await message.reply("Couldn't fetch a dog image. Try again later.")
                         return
                         
-                    if dog_url.endswith((".mp4", ".webm")):
-                        await client.send_video(chat.id, dog_url, supports_streaming=True)
-                    elif dog_url.endswith((".jpg", ".jpeg", ".png")):
-                        await client.send_photo(chat.id, dog_url)
-                    elif dog_url.endswith(".gif"):
-                        await client.send_animation(chat.id, dog_url)
+                    if dog_url.lower().endswith((".mp4", ".webm")):
+                        await message.reply_video(dog_url, supports_streaming=True)
+                    elif dog_url.lower().endswith((".jpg", ".jpeg", ".png")):
+                        await message.reply_photo(dog_url)
+                    elif dog_url.lower().endswith(".gif"):
+                        await message.reply_animation(dog_url)
                     else:
                         await message.reply(f"Unsupported file type: {dog_url}")
                 else:
@@ -179,18 +179,18 @@ async def cat_command(client: Client, message: types.Message):
                         await message.reply("Couldn't fetch a cat image. Try again later.")
                         return
 
-                    if cat_url.endswith((".mp4", ".webm")):
-                        await client.send_video(chat.id, cat_url, supports_streaming=True)
-                    elif cat_url.endswith((".jpg", ".jpeg", ".png")):
-                        await client.send_photo(chat.id, cat_url)
-                    elif cat_url.endswith(".gif"):
-                        await client.send_animation(chat.id, cat_url)
+                    if cat_url.lower().endswith((".mp4", ".webm")):
+                        await message.reply_video(cat_url, supports_streaming=True)
+                    elif cat_url.lower().endswith((".jpg", ".jpeg", ".png")):
+                        await message.reply_photo(cat_url)
+                    elif cat_url.lower().endswith(".gif"):
+                        await message.reply_animation(cat_url)
                     else:
                         await message.reply(f"Unsupported file type: {cat_url}")
                 else:
                     await message.reply(f"API Error: Status {response.status}")
     except Exception as e:
-        await message.reply(f"Error fetching cat image: {str(e)}")
+        await message.reply(f"Error fetching cat image: {str(e)}\nURL: {cat_url}")
 
 # ---------------------------
 # Affirmation Command Handler
