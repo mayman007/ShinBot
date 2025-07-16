@@ -8,51 +8,29 @@ import random
 import socket
 import http.client
 from typing import Dict, Optional, Tuple
-from .constants import MAX_FILESIZE, MAX_RETRIES, INITIAL_RETRY_DELAY, MAX_RETRY_DELAY
+from .constants import MAX_FILESIZE, MAX_RETRIES, INITIAL_RETRY_DELAY, MAX_RETRY_DELAY, download_cancellations
 from .format_utils import add_cookies_to_opts, extract_info, get_size
-from .file_utils import sanitize_filename, get_user_downloads_dir
+from .file_utils import sanitize_filename, get_user_downloads_dir, safe_delete
 from .progress_tracker import ProgressTracker
 
 logger = logging.getLogger(__name__)
 
-async def download_with_retry(ydl, url, retries=MAX_RETRIES, initial_delay=INITIAL_RETRY_DELAY):
-    """Download with retry logic for handling network errors."""
-    delay = initial_delay
-    last_error = None
-    
-    for attempt in range(retries + 1):
-        try:
-            if isinstance(url, list):
-                return await asyncio.to_thread(ydl.download, url)
-            else:
-                return await asyncio.to_thread(ydl.extract_info, url, download=True)
-        except (ConnectionResetError, ConnectionError, socket.error, http.client.IncompleteRead,
-                yt_dlp.utils.DownloadError, OSError) as e:
-            last_error = e
-            if attempt < retries:
-                # Add some jitter to the delay to prevent synchronized retries
-                jitter = random.uniform(0.1, 0.3) * delay
-                retry_delay = delay + jitter
-                logger.warning(f"Download attempt {attempt+1}/{retries+1} failed: {str(e)}. Retrying in {retry_delay:.2f}s...")
-                
-                await asyncio.sleep(retry_delay)
-                
-                # Exponential backoff with cap
-                delay = min(delay * 2, MAX_RETRY_DELAY)
-            else:
-                # Last attempt failed, re-raise the error
-                raise ValueError(f"Download failed after {retries+1} attempts: {str(last_error)}")
-        except Exception as e:
-            # For other errors, don't retry
-            raise ValueError(f"Unexpected error during download: {str(e)}")
-
 async def download_video(url: str, video_format_id: str, best_audio: Optional[Dict], 
-                        stream_type: str, resolution: str, client, chat_id, message_id, user_id=None) -> Tuple[str, str]:
+                        stream_type: str, resolution: str, client, chat_id, message_id, user_id=None, cancel_markup=None) -> Tuple[str, str]:
     """Download video at specified quality with progress updates."""
     if user_id is None:
         user_id = chat_id if chat_id > 0 else None
     
-    tracker = ProgressTracker(client, chat_id, message_id, f"Preparing {resolution} download...")
+    # Clear any previous cancellation state
+    download_cancellations.pop(user_id, None)
+    
+    tracker = ProgressTracker(
+        client, 
+        chat_id, 
+        message_id, 
+        f"Preparing {resolution} download...", 
+        cancel_markup  # Pass the cancel button markup
+    )
     await tracker.update_progress(0, 1, 0, None, force=True)
     
     info = await extract_info(url)
@@ -108,6 +86,11 @@ async def download_video(url: str, video_format_id: str, best_audio: Optional[Di
     
     # Define progress hook for yt-dlp
     def progress_hook(d):
+        # Check for cancellation at each progress update
+        if user_id in download_cancellations:
+            # Use a custom exception instead of KeyboardInterrupt to avoid asyncio issues
+            raise Exception("DOWNLOAD_CANCELLED_BY_USER")
+            
         if d['status'] == 'downloading':
             # Get download information
             bytes_downloaded = d.get('downloaded_bytes', 0)
@@ -169,6 +152,13 @@ async def download_video(url: str, video_format_id: str, best_audio: Optional[Di
         
         while not progress["finished"]:
             try:
+                # Check for cancellation
+                if user_id in download_cancellations:
+                    tracker.description = f"Cancelling download: {safe_title} [{resolution}]"
+                    await tracker.update_progress(0, 1, 0, 0, force=True)
+                    progress["finished"] = True
+                    break
+                
                 # Wait for event or timeout
                 try:
                     await asyncio.wait_for(progress["event"].wait(), 5)
@@ -272,6 +262,10 @@ async def download_video(url: str, video_format_id: str, best_audio: Optional[Di
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             await download_with_retry(ydl, url)
         
+        # Check if cancelled during download
+        if user_id in download_cancellations:
+            raise Exception("DOWNLOAD_CANCELLED_BY_USER")
+        
         # Mark as complete
         progress["finished"] = True
         progress["event"].set()
@@ -300,7 +294,7 @@ async def download_video(url: str, video_format_id: str, best_audio: Optional[Di
                 raise ValueError("Downloaded file not found")
     
     except Exception as e:
-        # Handle errors
+        # Handle errors and cancellation
         progress["finished"] = True
         progress["event"].set()
         
@@ -311,21 +305,85 @@ async def download_video(url: str, video_format_id: str, best_audio: Optional[Di
                 await updater_task
             except asyncio.CancelledError:
                 pass
+        
+        # Check if this was a cancellation
+        if "DOWNLOAD_CANCELLED_BY_USER" in str(e) or user_id in download_cancellations:
+            # Clean up any partial files
+            try:
+                if os.path.exists(expected_filename):
+                    safe_delete(expected_filename)
                 
-        # Update UI with error
-        tracker.description = f"Download failed: {str(e)}"
-        await tracker.update_progress(0, 1, 0, 0, force=True)
-        
-        # Re-raise the error
-        raise ValueError(f"Error downloading video: {str(e)}")
-        
-    return expected_filename, safe_title
+                # Also clean up any temp files in the user directory
+                user_downloads_dir = get_user_downloads_dir(user_id)
+                import glob
+                temp_patterns = [
+                    os.path.join(user_downloads_dir, f"*{safe_title}*.part"),
+                    os.path.join(user_downloads_dir, f"*{safe_title}*.tmp"),
+                    os.path.join(user_downloads_dir, f"*{safe_title}*.download"),
+                    os.path.join(user_downloads_dir, f"*.f{video_format_id}.*"),
+                ]
+                
+                for pattern in temp_patterns:
+                    for temp_file in glob.glob(pattern):
+                        safe_delete(temp_file)
+                        
+            except Exception as cleanup_error:
+                logger.error(f"Error during file cleanup: {cleanup_error}")
+            
+            # Update UI with cancellation message
+            tracker.description = f"Download cancelled: {safe_title} [{resolution}]"
+            await tracker.update_progress(0, 1, 0, 0, force=True)
+            
+            raise ValueError("Download cancelled by user")
+        else:
+            # Update UI with error
+            tracker.description = f"Download failed: {str(e)}"
+            await tracker.update_progress(0, 1, 0, 0, force=True)
+            
+            # Re-raise the error
+            raise ValueError(f"Error downloading video: {str(e)}")
 
-async def download_audio_by_format(url: str, audio_format_id: str, quality_str: str, client, chat_id, message_id, user_id=None) -> Tuple[str, str]:
+async def download_with_retry(ydl, url, retries=MAX_RETRIES, initial_delay=INITIAL_RETRY_DELAY):
+    """Download with retry logic for handling network errors."""
+    delay = initial_delay
+    last_error = None
+    
+    for attempt in range(retries + 1):
+        try:
+            if isinstance(url, list):
+                return await asyncio.to_thread(ydl.download, url)
+            else:
+                return await asyncio.to_thread(ydl.extract_info, url, download=True)
+        except Exception as e:
+            # Check if this is a cancellation
+            if "DOWNLOAD_CANCELLED_BY_USER" in str(e):
+                raise e  # Re-raise cancellation immediately
+                
+            # Handle network errors with retry
+            if isinstance(e, (ConnectionResetError, ConnectionError, socket.error, http.client.IncompleteRead,
+                            yt_dlp.utils.DownloadError, OSError)):
+                last_error = e
+                if attempt < retries:
+                    jitter = random.uniform(0.1, 0.3) * delay
+                    retry_delay = delay + jitter
+                    logger.warning(f"Download attempt {attempt+1}/{retries+1} failed: {str(e)}. Retrying in {retry_delay:.2f}s...")
+                    
+                    await asyncio.sleep(retry_delay)
+                    delay = min(delay * 2, MAX_RETRY_DELAY)
+                else:
+                    raise ValueError(f"Download failed after {retries+1} attempts: {str(last_error)}")
+            else:
+                # For other errors, don't retry
+                raise ValueError(f"Unexpected error during download: {str(e)}")
+
+async def download_audio_by_format(url: str, audio_format_id: str, quality_str: str, client, chat_id, message_id, user_id=None, cancel_markup=None) -> Tuple[str, str]:
     """Download audio at specified quality with progress updates."""
     if user_id is None:
         user_id = chat_id if chat_id > 0 else None
         logger.warning(f"No specific user_id provided for audio download. Using fallback: {user_id}")
+    
+    # Clear any previous cancellation state
+    download_cancellations.pop(user_id, None)
     
     info = await extract_info(url)
     safe_title = sanitize_filename(info.get("title", "audio"))
@@ -335,7 +393,13 @@ async def download_audio_by_format(url: str, audio_format_id: str, quality_str: 
     expected_template = os.path.join(user_downloads_dir, f"{safe_title}.{quality_str}.%(ext)s")
     expected_filename = os.path.join(user_downloads_dir, f"{safe_title}.{quality_str}.mp3")
     
-    tracker = ProgressTracker(client, chat_id, message_id, f"Downloading audio at {quality_str}...")
+    tracker = ProgressTracker(
+        client, 
+        chat_id, 
+        message_id, 
+        f"Downloading audio at {quality_str}...", 
+        cancel_markup  # Pass the cancel button markup
+    )
     
     # Create a shared progress state
     progress_state = {
@@ -362,6 +426,10 @@ async def download_audio_by_format(url: str, audio_format_id: str, quality_str: 
     
     def progress_hook(d):
         """Progress hook for yt-dlp."""
+        # Check for cancellation
+        if user_id in download_cancellations:
+            raise Exception("DOWNLOAD_CANCELLED_BY_USER")
+            
         if d['status'] == 'downloading':
             current_time = time.time()
             progress_state["downloaded"] = d.get('downloaded_bytes', 0)
@@ -401,6 +469,13 @@ async def download_audio_by_format(url: str, audio_format_id: str, quality_str: 
         
         while not progress_state["finished"]:
             try:
+                # Check for cancellation
+                if user_id in download_cancellations:
+                    tracker.description = f"Cancelling audio download: {quality_str}"
+                    await tracker.update_progress(0, 1, 0, 0, force=True)
+                    progress_state["finished"] = True
+                    break
+                
                 # Wait for event or timeout after retry_interval seconds
                 await asyncio.wait_for(progress_state["update_required"].wait(), retry_interval)
                 progress_state["update_required"].clear()
@@ -494,6 +569,10 @@ async def download_audio_by_format(url: str, audio_format_id: str, quality_str: 
             # Use our custom retry function instead of direct call
             await download_with_retry(ydl, [url])
         
+        # Check if cancelled during download
+        if user_id in download_cancellations:
+            raise Exception("DOWNLOAD_CANCELLED_BY_USER")
+        
         # Update with final progress (100%)
         if progress_state["total"] > 0:
             await tracker.update_progress(
@@ -521,16 +600,7 @@ async def download_audio_by_format(url: str, audio_format_id: str, quality_str: 
             matches = glob.glob(pattern)
             if matches:
                 expected_filename = matches[0]
-    except ValueError as e:
-        error_msg = str(e)
-        if "ConnectionReset" in error_msg or "10054" in error_msg:
-            logger.error(f"Network connection was reset during audio download: {error_msg}")
-            # Update progress message with connection error info
-            try:
-                tracker.description = "Audio download failed - connection reset"
-                await tracker.update_progress(0, 1, 0, 0)
-            except:
-                pass
+    except Exception as e:
         # Cancel the updater task in case of error
         progress_state["finished"] = True
         progress_state["update_required"].set()
@@ -540,7 +610,51 @@ async def download_audio_by_format(url: str, audio_format_id: str, quality_str: 
                 await updater_task
             except asyncio.CancelledError:
                 pass
-        raise ValueError(f"Error downloading audio: {str(e)}")
+        
+        # Check if this was a cancellation
+        if "DOWNLOAD_CANCELLED_BY_USER" in str(e) or user_id in download_cancellations:
+            # Clean up any partial files
+            try:
+                if os.path.exists(expected_filename):
+                    safe_delete(expected_filename)
+                
+                # Clean up temp files
+                user_downloads_dir = get_user_downloads_dir(user_id)
+                import glob
+                temp_patterns = [
+                    os.path.join(user_downloads_dir, f"*{safe_title}*.part"),
+                    os.path.join(user_downloads_dir, f"*{safe_title}*.tmp"),
+                    os.path.join(user_downloads_dir, f"*{safe_title}*.download"),
+                    os.path.join(user_downloads_dir, f"*.f{audio_format_id}.*"),
+                ]
+                
+                for pattern in temp_patterns:
+                    for temp_file in glob.glob(pattern):
+                        safe_delete(temp_file)
+                        
+            except Exception as cleanup_error:
+                logger.error(f"Error during file cleanup: {cleanup_error}")
+            
+            # Update progress message with cancellation info
+            try:
+                tracker.description = "Audio download cancelled"
+                await tracker.update_progress(0, 1, 0, 0)
+            except:
+                pass
+                
+            raise ValueError("Download cancelled by user")
+        else:
+            # Handle other errors
+            error_msg = str(e)
+            if "ConnectionReset" in error_msg or "10054" in error_msg:
+                logger.error(f"Network connection was reset during audio download: {error_msg}")
+                try:
+                    tracker.description = "Audio download failed - connection reset"
+                    await tracker.update_progress(0, 1, 0, 0)
+                except:
+                    pass
+            
+            raise ValueError(f"Error downloading audio: {str(e)}")
         
     return expected_filename, safe_title
 

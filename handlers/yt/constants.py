@@ -11,6 +11,8 @@ MAX_RETRY_DELAY = 10  # Maximum delay between retries in seconds
 # Track active downloads per user (make it a proper singleton with global scope)
 active_downloads = {}
 download_locks = {}  # Add locks per user to prevent race conditions
+# Track cancellation requests
+download_cancellations = {}  # user_id -> True if cancelled
 
 # Ensure downloads directory exists
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)

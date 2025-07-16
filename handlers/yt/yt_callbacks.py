@@ -2,7 +2,8 @@ import os
 import asyncio
 from io import BytesIO
 from pyrogram import Client
-from .constants import active_downloads, download_locks, MAX_FILESIZE
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from .constants import active_downloads, download_locks, MAX_FILESIZE, download_cancellations
 from .format_utils import extract_info
 from .download_manager import download_video, download_audio_by_format, download_subtitles
 from .upload_manager import upload_file_with_progress
@@ -58,7 +59,18 @@ async def yt_quality_button(client: Client, callback_query):
             
             await callback_query.message.edit(f"⚙️ Initializing download for {resolution} quality...\n{video_title}")
             
+            # Add cancel button
+            cancel_button = InlineKeyboardMarkup([
+                [InlineKeyboardButton("❌ Cancel Download", callback_data=f"cancel_{user_id}")]
+            ])
+            
             try:
+                # Update message with cancel button - this will be preserved during progress updates
+                await callback_query.message.edit(
+                    f"⬇️ Starting download: {video_title} [{resolution}]",
+                    reply_markup=cancel_button
+                )
+                
                 filename, safe_title = await download_video(
                     video_url, 
                     video_format_id, 
@@ -68,7 +80,8 @@ async def yt_quality_button(client: Client, callback_query):
                     client,
                     callback_query.message.chat.id,
                     callback_query.message.id,
-                    user_id
+                    user_id,
+                    cancel_button  # Pass the cancel button to download_video
                 )
                 
                 if os.path.exists(filename):
@@ -93,14 +106,20 @@ async def yt_quality_button(client: Client, callback_query):
                 safe_delete(filename)
                 
             except Exception as e:
-                await callback_query.message.edit(f"Error: {str(e)}")
+                if "cancelled" in str(e).lower():
+                    await callback_query.message.edit("❌ Download cancelled by user.")
+                else:
+                    await callback_query.message.edit(f"Error: {str(e)}")
             finally:
                 if user_id in active_downloads:
                     del active_downloads[user_id]
+                # Clean up cancellation state
+                download_cancellations.pop(user_id, None)
             
     except Exception as e:
         if 'user_id' in locals() and user_id in active_downloads:
             del active_downloads[user_id]
+        download_cancellations.pop(user_id, None)
         await callback_query.message.edit(f"An unexpected error occurred: {str(e)}")
 
 async def yt_audio_button(client: Client, callback_query):
@@ -148,7 +167,18 @@ async def yt_audio_button(client: Client, callback_query):
             
             await callback_query.message.edit(f"⚙️ Initializing audio download: {selected['abr']} kbps\n{audio_title}")
             
+            # Add cancel button
+            cancel_button = InlineKeyboardMarkup([
+                [InlineKeyboardButton("❌ Cancel Download", callback_data=f"cancel_{user_id}")]
+            ])
+            
             try:
+                # Update message with cancel button - this will be preserved during progress updates
+                await callback_query.message.edit(
+                    f"⬇️ Starting download: {audio_title} [{selected['abr']} kbps]",
+                    reply_markup=cancel_button
+                )
+                
                 filename, safe_title = await download_audio_by_format(
                     video_url, 
                     audio_format_id, 
@@ -156,7 +186,8 @@ async def yt_audio_button(client: Client, callback_query):
                     client, 
                     callback_query.message.chat.id, 
                     callback_query.message.id,
-                    user_id
+                    user_id,
+                    cancel_button  # Pass the cancel button to download_audio_by_format
                 )
                 
                 if not os.path.exists(filename):
@@ -181,14 +212,20 @@ async def yt_audio_button(client: Client, callback_query):
                 safe_delete(filename)
                 
             except Exception as e:
-                await callback_query.message.edit(f"Error: {str(e)}")
+                if "cancelled" in str(e).lower():
+                    await callback_query.message.edit("❌ Download cancelled by user.")
+                else:
+                    await callback_query.message.edit(f"Error: {str(e)}")
             finally:
                 if user_id in active_downloads:
                     del active_downloads[user_id]
+                # Clean up cancellation state
+                download_cancellations.pop(user_id, None)
             
     except Exception as e:
         if 'user_id' in locals() and user_id in active_downloads:
             del active_downloads[user_id]
+        download_cancellations.pop(user_id, None)
         await callback_query.message.edit(f"An unexpected error occurred: {str(e)}")
 
 async def yt_subs_callback(client: Client, callback_query):
@@ -250,3 +287,26 @@ async def yt_subs_callback(client: Client, callback_query):
 async def ignore_callback(client: Client, callback_query):
     """Handle ignore callback for header buttons."""
     await callback_query.answer("This is just a header, not a button.")
+
+async def cancel_download_callback(client: Client, callback_query):
+    """Handle download cancellation callback."""
+    try:
+        await callback_query.answer("Cancelling download...")
+        
+        # Extract user_id from callback data
+        user_id = int(callback_query.data.split("_")[1])
+        requesting_user = callback_query.from_user.id
+        
+        # Only allow the user who started the download to cancel it
+        if user_id != requesting_user:
+            await callback_query.answer("❌ You can only cancel your own downloads.", show_alert=True)
+            return
+        
+        # Mark download for cancellation
+        download_cancellations[user_id] = True
+        
+        # Update the message to show cancellation is in progress
+        await callback_query.message.edit("⏳ Cancelling download, please wait...")
+        
+    except Exception as e:
+        await callback_query.message.edit(f"Error cancelling download: {str(e)}")

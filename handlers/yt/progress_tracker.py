@@ -1,17 +1,19 @@
 import time
 import logging
 from pyrogram.errors import FloodWait
+from pyrogram.types import InlineKeyboardMarkup
 from .file_utils import format_bytes, format_speed, format_eta
 
 logger = logging.getLogger(__name__)
 
 class ProgressTracker:
     """Handles progress message updates with rate limiting and intelligent updates."""
-    def __init__(self, client, chat_id, message_id, description):
+    def __init__(self, client, chat_id, message_id, description, reply_markup=None):
         self.client = client
         self.chat_id = chat_id
         self.message_id = message_id
         self.description = description
+        self.reply_markup = reply_markup  # Store the reply markup (cancel button)
         self.last_update_time = 0
         self.start_time = time.time()
         self.flood_wait_until = 0
@@ -61,7 +63,13 @@ class ProgressTracker:
                 )
             
             try:
-                await self.client.edit_message_text(self.chat_id, self.message_id, msg)
+                # Include the reply markup (cancel button) in the update
+                await self.client.edit_message_text(
+                    self.chat_id, 
+                    self.message_id, 
+                    msg, 
+                    reply_markup=self.reply_markup
+                )
                 self.last_update_time = current_time
                 return True
             except FloodWait as e:
