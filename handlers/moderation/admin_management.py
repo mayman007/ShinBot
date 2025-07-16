@@ -168,9 +168,6 @@ async def demote_user(client: Client, message: Message):
             if member.status == "creator":
                 await message.reply(f"❌ Cannot demote {user.first_name} - user is the chat owner.")
                 return
-            elif member.status not in ["administrator"]:
-                await message.reply(f"❌ {user.first_name} is not an administrator.")
-                return
                 
         except UserNotParticipant:
             await message.reply(f"❌ {user.first_name} is not in this chat.")
