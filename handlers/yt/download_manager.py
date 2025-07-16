@@ -315,7 +315,6 @@ async def download_video(url: str, video_format_id: str, best_audio: Optional[Di
                 
                 # Also clean up any temp files in the user directory
                 user_downloads_dir = get_user_downloads_dir(user_id)
-                import glob
                 temp_patterns = [
                     os.path.join(user_downloads_dir, f"*{safe_title}*.part"),
                     os.path.join(user_downloads_dir, f"*{safe_title}*.tmp"),
@@ -342,6 +341,8 @@ async def download_video(url: str, video_format_id: str, best_audio: Optional[Di
             
             # Re-raise the error
             raise ValueError(f"Error downloading video: {str(e)}")
+        
+    return expected_filename, safe_title
 
 async def download_with_retry(ydl, url, retries=MAX_RETRIES, initial_delay=INITIAL_RETRY_DELAY):
     """Download with retry logic for handling network errors."""
@@ -620,7 +621,6 @@ async def download_audio_by_format(url: str, audio_format_id: str, quality_str: 
                 
                 # Clean up temp files
                 user_downloads_dir = get_user_downloads_dir(user_id)
-                import glob
                 temp_patterns = [
                     os.path.join(user_downloads_dir, f"*{safe_title}*.part"),
                     os.path.join(user_downloads_dir, f"*{safe_title}*.tmp"),
