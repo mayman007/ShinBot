@@ -6,6 +6,7 @@ from pyrogram.handlers import MessageHandler
 from utils.decorators import admin_only
 from utils.helpers import extract_user_and_reason
 from pyrogram import types
+from utils.usage import save_usage  # Import the usage tracking function
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,9 @@ async def check_bot_promote_permissions(client: Client, chat_id: int) -> tuple[b
 @admin_only
 async def promote_user(client: Client, message: Message):
     """Promote a user to administrator"""
+    chat = message.chat
+    await save_usage(chat, "promote")
+    
     try:
         # Check bot permissions first
         can_promote, error_msg = await check_bot_promote_permissions(client, message.chat.id)
@@ -137,6 +141,9 @@ async def promote_user(client: Client, message: Message):
 @admin_only
 async def demote_user(client: Client, message: Message):
     """Demote a user from administrator"""
+    chat = message.chat
+    await save_usage(chat, "demote")
+    
     try:
         # Check bot permissions first
         can_promote, error_msg = await check_bot_promote_permissions(client, message.chat.id)
@@ -230,6 +237,9 @@ async def demote_user(client: Client, message: Message):
 @admin_only
 async def kick_user(client: Client, message: Message):
     """Kick a user from the chat"""
+    chat = message.chat
+    await save_usage(chat, "kick")
+    
     try:
         user, reason = await extract_user_and_reason(client, message)
         if not user:

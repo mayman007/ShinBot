@@ -5,12 +5,16 @@ from pyrogram.errors import UserNotParticipant, ChatAdminRequired, UserAdminInva
 from pyrogram.handlers import MessageHandler
 from utils.decorators import admin_only
 from utils.helpers import extract_user_and_reason
+from utils.usage import save_usage  # Assuming save_usage is defined in utils.db
 
 logger = logging.getLogger(__name__)
 
 @admin_only
 async def ban_user(client: Client, message: Message):
     """Ban a user from the chat"""
+    chat = message.chat
+    await save_usage(chat, "ban")
+    
     try:
         user, reason = await extract_user_and_reason(client, message)
         if not user:
@@ -69,6 +73,9 @@ async def ban_user(client: Client, message: Message):
 @admin_only
 async def unban_user(client: Client, message: Message):
     """Unban a user from the chat"""
+    chat = message.chat
+    await save_usage(chat, "unban")
+    
     try:
         user, reason = await extract_user_and_reason(client, message)
         if not user:

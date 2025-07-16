@@ -10,6 +10,8 @@ import tempfile
 
 async def groupinfo_command(client: Client, message: Message):
     """Display comprehensive information about the current group chat."""
+    chat = message.chat
+    await save_usage(chat, "groupinfo")
     
     if message.chat.type == ChatType.PRIVATE:
         await message.reply_text("❌ This command can only be used in group chats!")
