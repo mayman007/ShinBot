@@ -86,6 +86,35 @@ async def usagedata_command(client: Client, message: types.Message):
                 # Sort commands by usage count (descending)
                 command_stats.sort(key=lambda x: x['total_usage'], reverse=True)
                 
+                # Calculate most active chats across all commands
+                chat_totals = {}  # chat_id -> {'name': name, 'total_usage': total, 'commands_used': set, 'type': type}
+                
+                for table in tables:
+                    table_name = table[0]
+                    try:
+                        chat_data = await cursor.execute(f"SELECT id, name, usage, type FROM {table_name};")
+                        chat_records = await chat_data.fetchall()
+                        
+                        for chat_id, chat_name, usage, chat_type in chat_records:
+                            if chat_id not in chat_totals:
+                                chat_totals[chat_id] = {
+                                    'name': chat_name,
+                                    'total_usage': 0,
+                                    'commands_used': set(),
+                                    'type': chat_type
+                                }
+                            chat_totals[chat_id]['total_usage'] += usage
+                            chat_totals[chat_id]['commands_used'].add(table_name)
+                    except Exception:
+                        continue
+                
+                # Sort chats by total usage
+                most_active_chats = sorted(
+                    chat_totals.items(), 
+                    key=lambda x: x[1]['total_usage'], 
+                    reverse=True
+                )[:15]  # Top 15 most active chats
+                
                 # Build the complete report
                 data_message = "BOT USAGE ANALYTICS REPORT\n"
                 data_message += f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
@@ -102,6 +131,28 @@ async def usagedata_command(client: Client, message: types.Message):
                     data_message += f"Most Used: /{most_used['name']} ({most_used['total_usage']:,} times)\n"
                 
                 data_message += "\n" + "=" * 50 + "\n\n"
+                
+                # Most active chats section
+                data_message += "MOST ACTIVE CHATS\n\n"
+                
+                for i, (chat_id, chat_info) in enumerate(most_active_chats, 1):
+                    display_name = chat_info['name'][:30] + "..." if len(chat_info['name']) > 30 else chat_info['name']
+                    
+                    type_emoji = {
+                        'private': '👤',
+                        'group': '👥',
+                        'supergroup': '🏢',
+                        'channel': '📢'
+                    }.get(chat_info['type'].lower(), '❓')
+                    
+                    percentage = (chat_info['total_usage'] / total_usage * 100) if total_usage > 0 else 0
+                    
+                    data_message += f"#{i:2d}. {type_emoji} {display_name}\n"
+                    data_message += f"     Total Usage: {chat_info['total_usage']:,} ({percentage:.1f}%)\n"
+                    data_message += f"     Commands Used: {len(chat_info['commands_used'])}\n"
+                    data_message += f"     Type: {chat_info['type'].title()}\n\n"
+                
+                data_message += "=" * 50 + "\n\n"
                 
                 # Detailed command breakdown
                 data_message += "COMMAND BREAKDOWN\n\n"
