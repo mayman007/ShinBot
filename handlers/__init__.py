@@ -6,6 +6,7 @@ from .anime.manga_commands import *
 from .moderation.mute_system import *
 from .moderation.warn_system import *
 from .moderation.ban_system import *
+from .moderation.lock_system import *
 from .moderation.admin_management import *
 from .timer.timer import *
 from .timer.timer_scheduler import *

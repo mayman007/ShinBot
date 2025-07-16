@@ -10,8 +10,10 @@ def register_handlers(client: Client):
     # Pyrogram's command filter handles the bot username suffix automatically.
     client.add_handler(MessageHandler(handlers.start_command, filters.command("start")))
     client.add_handler(MessageHandler(handlers.help_command, filters.command("help")))
-    client.add_handler(MessageHandler(handlers.mute_command, filters.command("mute") & filters.group))
-    client.add_handler(MessageHandler(handlers.unmute_command, filters.command("unmute") & filters.group))
+    client.add_handler(MessageHandler(handlers.mute_command, filters.command("mute")))
+    client.add_handler(MessageHandler(handlers.unmute_command, filters.command("unmute")))
+    client.add_handler(MessageHandler(handlers.lock_command, filters.command("lock")))
+    client.add_handler(MessageHandler(handlers.unlock_command, filters.command("unlock")))
     client.add_handler(MessageHandler(handlers.list_join_dates, filters.command("joindate")))
     client.add_handler(MessageHandler(handlers.usagedata_command, filters.command("usagedata")))
     client.add_handler(MessageHandler(handlers.character_command, filters.command("character")))
@@ -57,7 +59,7 @@ def register_handlers(client: Client):
 
     # Register a handler for text messages that are not commands
     all_commands = [
-        "start", "help", "mute", "unmute", "joindate", "usagedata", "character", "anime","manga", "aghpb",
+        "start", "help", "mute", "unmute", "lock", "unlock", "joindate", "usagedata", "character", "anime","manga", "aghpb",
         "echo", "ping", "search", "feedback", "calc", "groupinfo", "pfp", "chatpfp", "chatid", "timer",
         "timerslist", "timerdel", "reverse", "slot", "coinflip", "geekjoke", "dadjoke",
         "dog", "cat", "affirmation", "advice", "choose", "rps", "yt", "warn", "warndel", "warnsuser",
