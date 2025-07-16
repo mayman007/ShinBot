@@ -1,7 +1,7 @@
 from pyrogram import Client
 from handlers.utility.utility_commands import handle_search_callback
 from handlers.trivia.rps_commands import rps_callback_handler
-from handlers.yt.yt_commands import yt_quality_button, yt_audio_button, yt_subs_callback, ignore_callback
+from handlers.yt.yt_callbacks import yt_quality_button, yt_audio_button, yt_subs_callback, ignore_callback
 from handlers.anime.anime_commands import handle_anime_callback
 from handlers.anime.manga_commands import handle_manga_callback
 
@@ -24,12 +24,18 @@ async def button_click_handler(client: Client, callback_query):
     if data.startswith("yt_"):
         if data.startswith("yt_audio_"):
             await yt_audio_button(client, callback_query)
-        elif data.startswith("subs_"):
-            await yt_subs_callback(client, callback_query)
-        elif data == "ignore":
-            await ignore_callback(client, callback_query)
         else:
             await yt_quality_button(client, callback_query)
+        return
+    
+    # Handle subtitle callbacks
+    if data.startswith("subs_"):
+        await yt_subs_callback(client, callback_query)
+        return
+    
+    # Handle ignore callback
+    if data == "ignore":
+        await ignore_callback(client, callback_query)
         return
     
     # Handle anime pagination callbacks
