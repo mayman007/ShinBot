@@ -9,7 +9,7 @@ from pyrogram import Client, types
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from tcp_latency import measure_latency
 from utils.usage import save_usage
-from config import FEEDBACK_CHAT_ID
+from config import FEEDBACK_CHAT_ID, BOT_NAME
 
 # Global storage for search results (in production, use a database)
 search_results_storage = {}
@@ -25,8 +25,10 @@ async def start_command(client: Client, message: types.Message):
     await save_usage(chat, "start")
     sender = message.from_user
     await message.reply(
-        f"Hello {sender.first_name}, My name is Shin and I'm developed by @Mayman007tg.\n"
-        "I'm a multipurpose bot that can help you with various stuff!\nUse /help to learn more about me."
+        f"Hello {sender.first_name}! My name is {BOT_NAME}.\n\n"
+        "I'm an all-in-one multipurpose bot developed by @mayman007tg\n"
+        "- Use /help to discover all my commands and features\n"
+        "- Use /feedback to send suggestions to developers"
     )
 
 # ---------------------------
