@@ -4,11 +4,17 @@ from handlers.trivia.rps_commands import rps_callback_handler
 from handlers.yt.yt_callbacks import yt_quality_button, yt_audio_button, yt_subs_callback, ignore_callback, cancel_download_callback
 from handlers.anime.anime_commands import handle_anime_callback
 from handlers.anime.manga_commands import handle_manga_callback
+from handlers.utility.help import handle_help_callback
 
 
 # ---------- General Callback Query Handler ----------
 async def button_click_handler(client: Client, callback_query):
     data = callback_query.data
+    
+    # Handle help callbacks
+    if data.startswith("help_"):
+        await handle_help_callback(client, callback_query)
+        return
     
     # Handle search navigation callbacks
     if data.startswith("search_"):
