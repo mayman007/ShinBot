@@ -8,7 +8,8 @@ BOT_TOKEN: "YOUR_BOT_TOKEN"
 API_ID: YOUR_API_ID
 API_HASH: "YOU_API_HASH"
 BOT_USERNAME: "YOUR_BOT_USERNAME" # Bot username (without the "@")
-ADMIN_IDS: [123456789, 987654321] # Telegram user IDs for bot administrator
+BOT_NAME: "YOUR_BOT_NAME"
+ADMIN_IDS: [123456789, 987654321] # Telegram user IDs for bot administrators
 FEEDBACK_CHAT_ID: -1234567890 # Chat ID where feedback is sent (use /chatid to get chat IDs)
 
 # Optional settings
