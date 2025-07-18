@@ -10,6 +10,7 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from tcp_latency import measure_latency
 from utils.usage import save_usage
 from config import FEEDBACK_CHAT_ID, BOT_NAME
+from .help import help_command, handle_help_callback
 
 # Global storage for search results (in production, use a database)
 search_results_storage = {}
@@ -30,87 +31,6 @@ async def start_command(client: Client, message: types.Message):
         "- Use /help to discover all my commands and features\n"
         "- Use /feedback to send suggestions to developers"
     )
-
-# ---------------------------
-# Help command
-# ---------------------------
-async def help_command(client: Client, message: types.Message):
-    chat = message.chat
-    await save_usage(chat, "help")
-    
-    # Check if user wants moderation commands only
-    args = message.text.split()
-    if len(args) > 1 and args[1].lower() == "mod":
-        mod_help_text = (
-            "\nHere's my moderation commands list:\n"
-            "/ban - Ban a user\n"
-            "/demote - Demote a user from admin\n"
-            "/kick - Kick a user\n"
-            "/lock - Lock chat (prevent all members from messaging)\n"
-            "/mute - Mute a user\n"
-            "/promote - Promote a user to admin\n"
-            "/unban - Unban a user\n"
-            "/unlock - Unlock chat (restore messaging permissions)\n"
-            "/unmute - Unmute a user\n"
-            "/warn - Issue a warning to a user\n"
-            "/warndel - Delete a warning by ID\n"
-            "/warnslist - List all active warnings in chat\n"
-            "/warnsuser - View warnings for a specific user\n"
-        )
-        await message.reply(mod_help_text)
-        return
-    
-    help_text = (
-        "\nHere's my commands list:\n"
-        "/advice - Get a random advice\n"
-        "/affirmation - Get a random affirmation\n"
-        "/aghpb - Anime girl holding programming book\n"
-        "/anime - Search Anime\n"
-        "/ban - Ban a user\n"
-        "/calc - Calculate mathematical expressions\n"
-        "/cat - Get a random cat pic/vid/gif\n"
-        "/character - Search Anime & Manga characters\n"
-        "/chatid - Get the current chat ID\n"
-        "/chatpfp - Get the current chat picture\n"
-        "/choose - Make me choose for you\n"
-        "/coinflip - Flip a coin\n"
-        "/dadjoke - Get a random dad joke\n"
-        "/demote - Demote a user from admin\n"
-        "/dog - Get a random dog pic/vid/gif\n"
-        "/echo - Repeats your words\n"
-        "/feedback - Send feedback to developers\n"
-        "/geekjoke - Get a random geek joke\n"
-        "/gemini - Chat with Google's Gemini Pro AI\n"
-        "/groupinfo - Get group's info\n"
-        "/help - This message\n"
-        "/imagine - Generate AI images\n"
-        "/joindate - Get each member's join date in the group\n"
-        "/kick - Kick a user\n"
-        "/lock - Lock chat (prevent all members from messaging)\n"
-        "/manga - Search Manga\n"
-        "/meme - Get a random meme from Reddit\n"
-        "/mute - Mute a user\n"
-        "/pfp - Get user's profile picture\n"
-        "/ping - Get bot's latency\n"
-        "/promote - Promote a user to admin\n"
-        "/reverse - Reverse your words\n"
-        "/rps - Play Rock Paper Scissors\n"
-        "/search - Search the internet\n"
-        "/slot - A slot game\n"
-        "/start - Bot's introduction\n"
-        "/timer - Set yourself a timer\n"
-        "/timerdel - Delete a timer\n"
-        "/timerslist - Get a list of timers set in this chat\n"
-        "/unban - Unban a user\n"
-        "/unlock - Unlock chat (restore messaging permissions)\n"
-        "/unmute - Unmute a user\n"
-        "/warn - Issue a warning to a user\n"
-        "/warndel - Delete a warning by ID\n"
-        "/warnslist - List all active warnings in chat\n"
-        "/warnsuser - View warnings for a specific user\n"
-        "/yt - Download videos from YouTube and other sites\n"
-    )
-    await message.reply(help_text)
 
 # ---------------------------
 # Ping Command Handler
