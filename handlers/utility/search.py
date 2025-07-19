@@ -5,12 +5,9 @@ from pyrogram import Client, types
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from utils.usage import save_usage
 
-# Global storage for search results (in production, use a database)
 search_results_storage = {}
 
-# Store search results temporarily for pagination
 search_cache = {}
-
 
 # ---------------------------
 # Search command
