@@ -27,8 +27,8 @@ async def init_timer_db():
 async def get_chat_timer_table(connection, chat_id):
     """Get or create a chat-specific timer table."""
     # Sanitize chat_id for table name
-    chat_id_str = str(chat_id).replace("-100", "").replace("-", "")
-    table_name = f"timer_{chat_id_str}"
+    chat_id_str = str(chat_id).replace("-", "")
+    table_name = f"timers_for_{chat_id_str}"
     
     async with connection.cursor() as cursor:
         # Add chat to master table if not exists
