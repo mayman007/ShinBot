@@ -5,7 +5,6 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from pyrogram.errors import FloodWait
 from utils.usage import save_usage
 
-# Game data storage (in production, consider using a database)
 active_games = {}  # message_id -> game_data
 user_cooldowns = {}  # user_id -> timestamp
 
@@ -323,16 +322,65 @@ async def rps_play_again_callback(client: Client, callback_query):
     game_data = active_games[message_id]
     user = callback_query.from_user
     
-    # Only player1 can start a new game
-    if user.id != game_data["player1"].id:
-        await callback_query.answer("Only the original player can start a new game!", show_alert=True)
+    # Check if user is part of the game
+    is_player1 = user.id == game_data["player1"].id
+    is_player2 = "player2" in game_data and game_data["player2"] and user.id == game_data["player2"].id
+    
+    if not (is_player1 or is_player2):
+        await callback_query.answer("You're not part of this game!", show_alert=True)
         return
     
-    # Check cooldown
+    # Reduce cooldown to 1 second and improve logic
     current_time = time.time()
-    if current_time - game_data["start_time"] < 3:  # 3 second cooldown for play again
+    if current_time - game_data["start_time"] < 1:  # 1 second cooldown for play again
         await callback_query.answer("Please wait a moment before starting a new game.", show_alert=True)
         return
+    
+    # For PvP games, require both players to agree
+    if "player2" in game_data and game_data["player2"]:
+        # Initialize play_again_votes if not exists
+        if "play_again_votes" not in game_data:
+            game_data["play_again_votes"] = {}
+        
+        # Check if user already voted
+        if user.id in game_data["play_again_votes"]:
+            await callback_query.answer("You already pressed play again! Waiting for the other player.", show_alert=True)
+            return
+        
+        # Record the vote
+        game_data["play_again_votes"][user.id] = {
+            "name": user.first_name,
+            "time": current_time
+        }
+        
+        # Check if both players have voted
+        if len(game_data["play_again_votes"]) == 1:
+            # First player voted, wait for second
+            first_voter = list(game_data["play_again_votes"].values())[0]["name"]
+            other_player = game_data["player2"].first_name if is_player1 else game_data["player1"].first_name
+            
+            # Update message to show waiting for second player
+            current_text = callback_query.message.text
+            play_again_button = [[InlineKeyboardButton("🔄 Play Again", callback_data="rps_play_again")]]
+            
+            waiting_text = f"{current_text}\n\n⏳ **{first_voter}** wants to play again!\nWaiting for **{other_player}** to agree..."
+            
+            try:
+                await callback_query.message.edit_text(waiting_text, reply_markup=InlineKeyboardMarkup(play_again_button))
+            except Exception as e:
+                await callback_query.answer(f"Error updating game: {str(e)}", show_alert=True)
+                return
+            
+            return
+            
+        elif len(game_data["play_again_votes"]) == 2:
+            # Both players voted, start new game
+            votes = list(game_data["play_again_votes"].values())
+            first_voter = votes[0]["name"]
+            second_voter = votes[1]["name"]
+            
+            # Clear votes for next round
+            game_data["play_again_votes"] = {}
     
     # Create new game
     buttons = [
@@ -343,6 +391,9 @@ async def rps_play_again_callback(client: Client, callback_query):
         ]
     ]
     
+    # Set current time for new game immediately
+    new_start_time = current_time
+    
     if "player2" in game_data and game_data["player2"]:
         # Player vs Player rematch
         new_game_data = {
@@ -352,7 +403,7 @@ async def rps_play_again_callback(client: Client, callback_query):
             "player1_choice": None,
             "player2_choice": None,
             "current_turn": "player1",
-            "start_time": current_time,
+            "start_time": new_start_time,
             "player1_wins": game_data.get("player1_wins", 0),
             "player2_wins": game_data.get("player2_wins", 0),
             "ties": game_data.get("ties", 0)
@@ -362,14 +413,18 @@ async def rps_play_again_callback(client: Client, callback_query):
         
         text = f"🎮 **Rock Paper Scissors**\n\n{game_data['player1'].first_name} vs {game_data['player2'].first_name}\n\nWaiting for **{game_data['player1'].first_name}** to choose...\n\nRock, paper, or scissors? Choose wisely!{score_text}"
     else:
-        # Player vs Bot rematch
+        # Player vs Bot rematch (only player1 can start)
+        if not is_player1:
+            await callback_query.answer("Only the original player can start a new game!", show_alert=True)
+            return
+            
         new_game_data = {
             "type": "pve",
             "player1": game_data["player1"],
             "player2": None,
             "player1_choice": None,
             "bot_choice": None,
-            "start_time": current_time,
+            "start_time": new_start_time,
             "player_wins": game_data.get("player_wins", 0),
             "bot_wins": game_data.get("bot_wins", 0),
             "ties": game_data.get("ties", 0)
@@ -379,6 +434,9 @@ async def rps_play_again_callback(client: Client, callback_query):
         
         text = f"🎮 **Rock Paper Scissors**\n\nYou vs Bot\n\nRock, paper, or scissors? Choose wisely!{score_text}"
     
+    # Update active games before trying to edit message
+    active_games[message_id] = new_game_data
+    
     try:
         await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
     except FloodWait as e:
@@ -387,5 +445,3 @@ async def rps_play_again_callback(client: Client, callback_query):
     except Exception as e:
         await callback_query.answer(f"Error starting new game: {str(e)}", show_alert=True)
         return
-    
-    active_games[message_id] = new_game_data
