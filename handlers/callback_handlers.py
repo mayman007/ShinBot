@@ -1,10 +1,10 @@
 from pyrogram import Client
-from handlers.utility.utility_commands import handle_search_callback
-from handlers.trivia.rps_commands import rps_callback_handler
+from handlers import handle_search_callback
+from handlers import rps_callback_handler
 from handlers.yt.yt_callbacks import yt_quality_button, yt_audio_button, yt_subs_callback, ignore_callback, cancel_download_callback
-from handlers.anime.anime_commands import handle_anime_callback
-from handlers.anime.manga_commands import handle_manga_callback
-from handlers.utility.help import handle_help_callback
+from handlers import handle_anime_callback
+from handlers import handle_manga_callback
+from handlers import handle_help_callback
 
 
 # ---------- General Callback Query Handler ----------
