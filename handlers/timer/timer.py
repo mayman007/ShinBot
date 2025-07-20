@@ -6,6 +6,65 @@ from pyrogram import Client, types
 from handlers.timer.timer_scheduler import get_chat_timer_table, schedule_timer, cancel_timer
 from utils.decorators import check_admin_permissions
 
+# Store pagination data temporarily
+timer_pagination_data = {}
+
+def create_timer_pagination_keyboard(current_page, total_pages, callback_prefix):
+    """Create pagination keyboard with Previous/Next buttons for timers."""
+    keyboard = []
+    buttons = []
+    
+    # Previous button
+    if current_page > 1:
+        buttons.append(types.InlineKeyboardButton(
+            "◀️ Previous", 
+            callback_data=f"{callback_prefix}_{current_page - 1}"
+        ))
+    
+    # Page indicator
+    buttons.append(types.InlineKeyboardButton(
+        f"{current_page}/{total_pages}", 
+        callback_data="ignore"
+    ))
+    
+    # Next button
+    if current_page < total_pages:
+        buttons.append(types.InlineKeyboardButton(
+            "Next ▶️", 
+            callback_data=f"{callback_prefix}_{current_page + 1}"
+        ))
+    
+    if buttons:
+        keyboard.append(buttons)
+    
+    return types.InlineKeyboardMarkup(keyboard) if keyboard else None
+
+async def split_timer_text_into_pages_async(lines, max_length=500):
+    """Split timer text lines into pages that fit within message limits."""
+    pages = []
+    current_page = ""
+    
+    for i, line in enumerate(lines):
+        # Yield control every 100 lines for very large datasets
+        if i % 100 == 0:
+            await asyncio.sleep(0)
+            
+        # Check if adding this line would exceed the limit
+        if len(current_page) + len(line) + 2 > max_length and current_page:
+            pages.append(current_page.strip())
+            current_page = line
+        else:
+            if current_page:
+                current_page += "\n" + line
+            else:
+                current_page = line
+    
+    # Add the last page
+    if current_page:
+        pages.append(current_page.strip())
+    
+    return pages
+
 # ---------------------------
 # Timer Command Handler
 # ---------------------------
@@ -182,7 +241,7 @@ async def list_timers_command(client: Client, message: types.Message):
     active_timer_data.sort(key=lambda x: x[5])
     
     # If no ID provided, list all timers that the user can remove
-    lines = ["**🔔 Active Timers:**\n\n"]
+    lines = ["**🔔 Active Timers:**\n"]
     active_timers = False
     
     for db_id, end_time_str, reason, user_id, status, _ in active_timer_data:
@@ -232,34 +291,26 @@ async def list_timers_command(client: Client, message: types.Message):
         await message.reply("No active timers in this chat.")
         return
 
-    # Handle message length limit 
-    full_message = "\n".join(lines)
-    if len(full_message) <= 4000:
-        await message.reply(full_message)
+    # Split into pages
+    pages = await split_timer_text_into_pages_async(lines)
+    
+    if len(pages) == 1:
+        # Single page, no pagination needed
+        await message.reply(pages[0])
     else:
-        # Split message into multiple parts
-        messages = []
-        current_message = lines[0]
+        # Multiple pages, use pagination
+        callback_prefix = f"timerslist_{chat.id}"
         
-        for i in range(1, len(lines)-1):
-            if len(current_message) + len(lines[i]) + 2 > 4000:
-                messages.append(current_message)
-                current_message = f"**🔔 Active Timers (continued):**\n\n{lines[i]}"
-            else:
-                current_message += "\n\n" + lines[i]
+        # Store pagination data
+        timer_pagination_data[callback_prefix] = {
+            'pages': pages,
+            'chat_id': chat.id,
+            'user_id': sender.id  # Store who requested it
+        }
         
-        # Add the final instruction
-        if len(current_message) + len(lines[-1]) + 2 <= 4000:
-            current_message += "\n\n" + lines[-1]
-        else:
-            messages.append(current_message)
-            current_message = lines[-1]
-            
-        messages.append(current_message)
-        
-        for msg in messages:
-            await message.reply(msg)
-            await asyncio.sleep(0.5)
+        # Send first page with navigation
+        keyboard = create_timer_pagination_keyboard(1, len(pages), callback_prefix)
+        await message.reply(pages[0], reply_markup=keyboard)
 
 # Remove timer command
 async def remove_timer_command(client: Client, message: types.Message):
@@ -324,7 +375,7 @@ async def remove_timer_command(client: Client, message: types.Message):
         return
     
     # If no ID provided, list all timers that the user can remove
-    lines = ["**🔔 Timers You Can Remove:**\n\n"]
+    lines = ["**🔔 Timers You Can Remove:**\n"]
     active_timers = False
     
     # Filter timers and add remaining time for sorting
@@ -390,31 +441,78 @@ async def remove_timer_command(client: Client, message: types.Message):
     
     lines.append("\nUse `/timerdel ID` to cancel a specific timer.")
     
-    # Handle message length limit 
-    full_message = "\n".join(lines)
-    if len(full_message) <= 4000:
-        await message.reply(full_message)
+    # Split into pages
+    pages = await split_timer_text_into_pages_async(lines)
+    
+    if len(pages) == 1:
+        # Single page, no pagination needed
+        await message.reply(pages[0])
     else:
-        # Split message into multiple parts
-        messages = []
-        current_message = lines[0]
+        # Multiple pages, use pagination
+        callback_prefix = f"timerdel_{chat.id}"
         
-        for i in range(1, len(lines)-1):
-            if len(current_message) + len(lines[i]) + 2 > 4000:
-                messages.append(current_message)
-                current_message = f"**🔔 Active Timers (continued):**\n\n{lines[i]}"
-            else:
-                current_message += "\n\n" + lines[i]
+        # Store pagination data
+        timer_pagination_data[callback_prefix] = {
+            'pages': pages,
+            'chat_id': chat.id,
+            'user_id': sender.id  # Store who requested it
+        }
         
-        # Add the final instruction
-        if len(current_message) + len(lines[-1]) + 2 <= 4000:
-            current_message += "\n\n" + lines[-1]
-        else:
-            messages.append(current_message)
-            current_message = lines[-1]
-            
-        messages.append(current_message)
+        # Send first page with navigation
+        keyboard = create_timer_pagination_keyboard(1, len(pages), callback_prefix)
+        await message.reply(pages[0], reply_markup=keyboard)
+
+# ---------------------------
+# Timer pagination callback handler
+# ---------------------------
+async def handle_timer_pagination(client: Client, callback_query):
+    """Handle pagination callbacks for timer commands."""
+    try:
+        data = callback_query.data
         
-        for msg in messages:
-            await message.reply(msg)
-            await asyncio.sleep(0.5)
+        # Extract callback prefix and page number
+        if "_" not in data:
+            return
+        
+        parts = data.rsplit("_", 1)
+        callback_prefix = parts[0]
+        try:
+            page_num = int(parts[1])
+        except ValueError:
+            return
+        
+        # Check if we have pagination data for this prefix
+        if callback_prefix not in timer_pagination_data:
+            await callback_query.answer("Pagination data expired. Please run the command again.", show_alert=True)
+            return
+        
+        data_info = timer_pagination_data[callback_prefix]
+        
+        # Check if the user who clicked is the one who requested it
+        if callback_query.from_user.id != data_info['user_id']:
+            await callback_query.answer("You didn't request this information.", show_alert=True)
+            return
+        
+        pages = data_info['pages']
+        
+        # Validate page number
+        if page_num < 1 or page_num > len(pages):
+            await callback_query.answer("Invalid page number.", show_alert=True)
+            return
+        
+        # Create new keyboard
+        keyboard = create_timer_pagination_keyboard(page_num, len(pages), callback_prefix)
+        
+        # Edit message with new page
+        await callback_query.edit_message_text(
+            pages[page_num - 1],
+            reply_markup=keyboard
+        )
+        
+        await callback_query.answer()
+        
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error in timer pagination: {e}")
+        await callback_query.answer("An error occurred while navigating.", show_alert=True)

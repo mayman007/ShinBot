@@ -5,6 +5,8 @@ from handlers.yt.yt_callbacks import yt_quality_button, yt_audio_button, yt_subs
 from handlers import handle_anime_callback
 from handlers import handle_manga_callback
 from handlers import handle_help_callback
+from handlers.moderation.warn_system import handle_warns_pagination
+from handlers.timer.timer import handle_timer_pagination
 
 
 # ---------- General Callback Query Handler ----------
@@ -24,6 +26,16 @@ async def button_click_handler(client: Client, callback_query):
     # Handle RPS callbacks
     if data.startswith("rps_"):
         await rps_callback_handler(client, callback_query)
+        return
+    
+    # Handle warns pagination callbacks
+    if data.startswith("warnslist_") or data.startswith("warnsuser_"):
+        await handle_warns_pagination(client, callback_query)
+        return
+    
+    # Handle timer pagination callbacks
+    if data.startswith("timerslist_") or data.startswith("timerdel_"):
+        await handle_timer_pagination(client, callback_query)
         return
     
     # Handle YouTube callbacks

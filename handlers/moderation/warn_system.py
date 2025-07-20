@@ -10,6 +10,65 @@ from utils.helpers import extract_user_and_reason
 
 logger = logging.getLogger(__name__)
 
+# Store pagination data temporarily
+pagination_data = {}
+
+async def create_pagination_keyboard(current_page, total_pages, callback_prefix):
+    """Create pagination keyboard with Previous/Next buttons."""
+    keyboard = []
+    buttons = []
+    
+    # Previous button
+    if current_page > 1:
+        buttons.append(types.InlineKeyboardButton(
+            "◀️ Previous", 
+            callback_data=f"{callback_prefix}_{current_page - 1}"
+        ))
+    
+    # Page indicator
+    buttons.append(types.InlineKeyboardButton(
+        f"{current_page}/{total_pages}", 
+        callback_data="ignore"
+    ))
+    
+    # Next button
+    if current_page < total_pages:
+        buttons.append(types.InlineKeyboardButton(
+            "Next ▶️", 
+            callback_data=f"{callback_prefix}_{current_page + 1}"
+        ))
+    
+    if buttons:
+        keyboard.append(buttons)
+    
+    return types.InlineKeyboardMarkup(keyboard) if keyboard else None
+
+async def split_text_into_pages(lines, max_length=500):
+    """Split text lines into pages that fit within message limits."""
+    pages = []
+    current_page = ""
+    
+    for i, line in enumerate(lines):
+        # Yield control every 50 lines for very large datasets
+        if i % 50 == 0:
+            await asyncio.sleep(0)
+            
+        # Check if adding this line would exceed the limit
+        if len(current_page) + len(line) + 2 > max_length and current_page:
+            pages.append(current_page.strip())
+            current_page = line
+        else:
+            if current_page:
+                current_page += "\n" + line
+            else:
+                current_page = line
+    
+    # Add the last page
+    if current_page:
+        pages.append(current_page.strip())
+    
+    return pages
+
 async def init_warns_db():
     """Initialize the warns database."""
     async with aiosqlite.connect("db/warns.db") as connection:
@@ -205,7 +264,7 @@ async def warnsuser_command(client: Client, message: types.Message):
             await message.reply(f"{user.first_name} has no active warnings in this chat.")
             return
         
-        # Build response message
+        # Build response lines
         lines = [f"**⚠️ Warnings for {user.first_name}**\n"]
         
         for warn_id, warned_by, reason, warn_date in warnings:
@@ -231,27 +290,27 @@ async def warnsuser_command(client: Client, message: types.Message):
         
         lines.append(f"\nTotal active warnings: {len(warnings)}")
         
-        # Handle message length limit
-        full_message = "\n".join(lines)
-        if len(full_message) <= 4000:
-            await message.reply(full_message)
+        # Split into pages
+        pages = await split_text_into_pages(lines)
+        
+        if len(pages) == 1:
+            # Single page, no pagination needed
+            await message.reply(pages[0])
         else:
-            # Split into multiple messages
-            messages = []
-            current_message = lines[0]
+            # Multiple pages, use pagination
+            callback_prefix = f"warnsuser_{chat.id}_{user.id}"
             
-            for i in range(1, len(lines)):
-                if len(current_message) + len(lines[i]) + 2 > 4000:
-                    messages.append(current_message)
-                    current_message = f"⚠️ **Warnings for {user.first_name} (continued)**\n\n{lines[i]}"
-                else:
-                    current_message += "\n" + lines[i]
+            # Store pagination data
+            pagination_data[callback_prefix] = {
+                'pages': pages,
+                'user_name': user.first_name,
+                'chat_id': chat.id,
+                'user_id': message.from_user.id  # Store who requested it
+            }
             
-            messages.append(current_message)
-            
-            for msg in messages:
-                await message.reply(msg)
-                await asyncio.sleep(0.5)
+            # Send first page with navigation
+            keyboard = await create_pagination_keyboard(1, len(pages), callback_prefix)
+            await message.reply(pages[0], reply_markup=keyboard)
         
     except Exception as e:
         await message.reply(f"An error occurred while fetching warnings: {str(e)}")
@@ -292,7 +351,7 @@ async def warnslist_command(client: Client, message: types.Message):
                 user_warnings[user_id] = []
             user_warnings[user_id].append((warn_id, warned_by, reason, warn_date))
         
-        # Build response message
+        # Build response lines
         lines = [f"**⚠️ All Active Warnings in {chat.title or 'this chat'}**\n"]
         
         for user_id, user_warns in user_warnings.items():
@@ -331,29 +390,81 @@ async def warnslist_command(client: Client, message: types.Message):
         lines.append(f"Total warnings: {len(warnings)}")
         lines.append("Use /warnsuser @user for detailed user warnings")
         
-        # Handle message length limit
-        full_message = "\n".join(lines)
-        if len(full_message) <= 4000:
-            await message.reply(full_message)
+        # Split into pages
+        pages = await split_text_into_pages(lines)
+        
+        if len(pages) == 1:
+            # Single page, no pagination needed
+            await message.reply(pages[0])
         else:
-            # Split into multiple messages
-            messages = []
-            current_message = lines[0]
+            # Multiple pages, use pagination
+            callback_prefix = f"warnslist_{chat.id}"
             
-            for i in range(1, len(lines)):
-                if len(current_message) + len(lines[i]) + 2 > 4000:
-                    messages.append(current_message)
-                    current_message = f"⚠️ **All Active Warnings (continued)**\n\n{lines[i]}"
-                else:
-                    current_message += "\n" + lines[i]
+            # Store pagination data
+            pagination_data[callback_prefix] = {
+                'pages': pages,
+                'chat_title': chat.title or 'this chat',
+                'chat_id': chat.id,
+                'user_id': sender.id  # Store who requested it
+            }
             
-            messages.append(current_message)
-            
-            for msg in messages:
-                await message.reply(msg)
-                await asyncio.sleep(0.5)
+            # Send first page with navigation
+            keyboard = await create_pagination_keyboard(1, len(pages), callback_prefix)
+            await message.reply(pages[0], reply_markup=keyboard)
         
     except Exception as e:
         await message.reply(f"An error occurred while fetching warnings: {str(e)}")
         logger.error(f"Error in warnslist command: {e}")
+
+# ---------------------------
+# Pagination callback handler
+# ---------------------------
+async def handle_warns_pagination(client: Client, callback_query):
+    """Handle pagination callbacks for warns commands."""
+    try:
+        data = callback_query.data
         
+        # Extract callback prefix and page number
+        if "_" not in data:
+            return
+        
+        parts = data.rsplit("_", 1)
+        callback_prefix = parts[0]
+        try:
+            page_num = int(parts[1])
+        except ValueError:
+            return
+        
+        # Check if we have pagination data for this prefix
+        if callback_prefix not in pagination_data:
+            await callback_query.answer("Pagination data expired. Please run the command again.", show_alert=True)
+            return
+        
+        data_info = pagination_data[callback_prefix]
+        
+        # Check if the user who clicked is the one who requested it
+        if callback_query.from_user.id != data_info['user_id']:
+            await callback_query.answer("You didn't request this information.", show_alert=True)
+            return
+        
+        pages = data_info['pages']
+        
+        # Validate page number
+        if page_num < 1 or page_num > len(pages):
+            await callback_query.answer("Invalid page number.", show_alert=True)
+            return
+        
+        # Create new keyboard
+        keyboard = await create_pagination_keyboard(page_num, len(pages), callback_prefix)
+        
+        # Edit message with new page
+        await callback_query.edit_message_text(
+            pages[page_num - 1],
+            reply_markup=keyboard
+        )
+        
+        await callback_query.answer()
+        
+    except Exception as e:
+        logger.error(f"Error in warns pagination: {e}")
+        await callback_query.answer("An error occurred while navigating.", show_alert=True)
