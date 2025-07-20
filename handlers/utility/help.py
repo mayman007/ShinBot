@@ -52,6 +52,7 @@ COMMAND_CATEGORIES = {
         "name": "🎉 Trivia",
         "commands": {
             "/rps": "Play Rock Paper Scissors",
+            "/tictactoe": "Play TicTacToe",
             "/meme": "Get a random meme from Reddit",
             "/cat": "Get a random cat pic/vid/gif",
             "/dog": "Get a random dog pic/vid/gif",

@@ -1,6 +1,7 @@
 from pyrogram import Client
 from handlers import handle_search_callback
 from handlers import rps_callback_handler
+from handlers.trivia.tictactoe_commands import tictactoe_callback_handler
 from handlers.yt.yt_callbacks import yt_quality_button, yt_audio_button, yt_subs_callback, ignore_callback, cancel_download_callback
 from handlers import handle_anime_callback
 from handlers import handle_manga_callback
@@ -26,6 +27,11 @@ async def button_click_handler(client: Client, callback_query):
     # Handle RPS callbacks
     if data.startswith("rps_"):
         await rps_callback_handler(client, callback_query)
+        return
+    
+    # Handle TicTacToe callbacks
+    if data.startswith("ttt_"):
+        await tictactoe_callback_handler(client, callback_query)
         return
     
     # Handle warns pagination callbacks
