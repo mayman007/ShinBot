@@ -1,3 +1,4 @@
+import asyncio
 from pyrogram import Client
 from pyrogram.types import Message
 import logging
@@ -103,3 +104,29 @@ async def extract_user_and_reason(client: Client, message: Message):
         logger.warning(f"Could not get user from identifier '{command_parts[1]}': {e}")
     
     return user, reason
+
+async def split_text_into_pages(lines, max_length=1000):
+    """Split text lines into pages that fit within message limits."""
+    pages = []
+    current_page = ""
+    
+    for i, line in enumerate(lines):
+        # Yield control every 50 lines for very large datasets
+        if i % 50 == 0:
+            await asyncio.sleep(0)
+            
+        # Check if adding this line would exceed the limit
+        if len(current_page) + len(line) + 2 > max_length and current_page:
+            pages.append(current_page.strip())
+            current_page = line
+        else:
+            if current_page:
+                current_page += "\n" + line
+            else:
+                current_page = line
+    
+    # Add the last page
+    if current_page:
+        pages.append(current_page.strip())
+    
+    return pages

@@ -5,8 +5,8 @@ import logging
 from pyrogram import Client, types
 from pyrogram.errors import UserAdminInvalid
 from utils.usage import save_usage
-from utils.decorators import admin_only, check_admin_permissions
-from utils.helpers import extract_user_and_reason
+from utils.decorators import admin_only
+from utils.helpers import extract_user_and_reason, split_text_into_pages
 
 logger = logging.getLogger(__name__)
 
@@ -42,32 +42,6 @@ async def create_pagination_keyboard(current_page, total_pages, callback_prefix)
         keyboard.append(buttons)
     
     return types.InlineKeyboardMarkup(keyboard) if keyboard else None
-
-async def split_text_into_pages(lines, max_length=500):
-    """Split text lines into pages that fit within message limits."""
-    pages = []
-    current_page = ""
-    
-    for i, line in enumerate(lines):
-        # Yield control every 50 lines for very large datasets
-        if i % 50 == 0:
-            await asyncio.sleep(0)
-            
-        # Check if adding this line would exceed the limit
-        if len(current_page) + len(line) + 2 > max_length and current_page:
-            pages.append(current_page.strip())
-            current_page = line
-        else:
-            if current_page:
-                current_page += "\n" + line
-            else:
-                current_page = line
-    
-    # Add the last page
-    if current_page:
-        pages.append(current_page.strip())
-    
-    return pages
 
 async def init_warns_db():
     """Initialize the warns database."""

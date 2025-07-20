@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import aiosqlite
+from utils.helpers import split_text_into_pages
 from utils.usage import save_usage
 from pyrogram import Client, types
 from handlers.timer.timer_scheduler import get_chat_timer_table, schedule_timer, cancel_timer
@@ -38,32 +39,6 @@ def create_timer_pagination_keyboard(current_page, total_pages, callback_prefix)
         keyboard.append(buttons)
     
     return types.InlineKeyboardMarkup(keyboard) if keyboard else None
-
-async def split_timer_text_into_pages_async(lines, max_length=500):
-    """Split timer text lines into pages that fit within message limits."""
-    pages = []
-    current_page = ""
-    
-    for i, line in enumerate(lines):
-        # Yield control every 100 lines for very large datasets
-        if i % 100 == 0:
-            await asyncio.sleep(0)
-            
-        # Check if adding this line would exceed the limit
-        if len(current_page) + len(line) + 2 > max_length and current_page:
-            pages.append(current_page.strip())
-            current_page = line
-        else:
-            if current_page:
-                current_page += "\n" + line
-            else:
-                current_page = line
-    
-    # Add the last page
-    if current_page:
-        pages.append(current_page.strip())
-    
-    return pages
 
 # ---------------------------
 # Timer Command Handler
@@ -292,7 +267,7 @@ async def list_timers_command(client: Client, message: types.Message):
         return
 
     # Split into pages
-    pages = await split_timer_text_into_pages_async(lines)
+    pages = await split_text_into_pages(lines)
     
     if len(pages) == 1:
         # Single page, no pagination needed
@@ -442,7 +417,7 @@ async def remove_timer_command(client: Client, message: types.Message):
     lines.append("\nUse `/timerdel ID` to cancel a specific timer.")
     
     # Split into pages
-    pages = await split_timer_text_into_pages_async(lines)
+    pages = await split_text_into_pages(lines)
     
     if len(pages) == 1:
         # Single page, no pagination needed
