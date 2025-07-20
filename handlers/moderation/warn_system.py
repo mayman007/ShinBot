@@ -43,14 +43,14 @@ async def create_pagination_keyboard(current_page, total_pages, callback_prefix)
     
     return types.InlineKeyboardMarkup(keyboard) if keyboard else None
 
-async def init_warns_db():
-    """Initialize the warns database."""
+async def init_warns_db(chat_id):
+    """Initialize the warns database for a specific chat."""
+    table_name = f"warns_chat_{abs(chat_id)}"
     async with aiosqlite.connect("db/warns.db") as connection:
         async with connection.cursor() as cursor:
-            await cursor.execute("""
-                CREATE TABLE IF NOT EXISTS warns (
+            await cursor.execute(f"""
+                CREATE TABLE IF NOT EXISTS {table_name} (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    chat_id INTEGER,
                     user_id INTEGER,
                     warned_by INTEGER,
                     reason TEXT,
@@ -59,7 +59,7 @@ async def init_warns_db():
                 )
             """)
             await connection.commit()
-            logger.info("Warns database initialized")
+            logger.info(f"Warns database initialized for chat {chat_id}")
 
 # ---------------------------
 # Warn command
@@ -97,15 +97,16 @@ async def warn_command(client: Client, message: types.Message):
     
     try:
         # Initialize database
-        await init_warns_db()
+        await init_warns_db(chat.id)
+        table_name = f"warns_chat_{abs(chat.id)}"
         
         # Save warn to database
         warn_date = datetime.datetime.now().isoformat()
         async with aiosqlite.connect("db/warns.db") as connection:
             async with connection.cursor() as cursor:
                 await cursor.execute(
-                    "INSERT INTO warns (chat_id, user_id, warned_by, reason, warn_date) VALUES (?, ?, ?, ?, ?)",
-                    (chat.id, user.id, sender.id, reason, warn_date)
+                    f"INSERT INTO {table_name} (user_id, warned_by, reason, warn_date) VALUES (?, ?, ?, ?)",
+                    (user.id, sender.id, reason, warn_date)
                 )
                 warn_id = cursor.lastrowid
                 await connection.commit()
@@ -115,8 +116,8 @@ async def warn_command(client: Client, message: types.Message):
         async with aiosqlite.connect("db/warns.db") as connection:
             async with connection.cursor() as cursor:
                 await cursor.execute(
-                    "SELECT COUNT(*) FROM warns WHERE chat_id = ? AND user_id = ? AND status = 'active'",
-                    (chat.id, user.id)
+                    f"SELECT COUNT(*) FROM {table_name} WHERE user_id = ? AND status = 'active'",
+                    (user.id,)
                 )
                 total_warns = await cursor.fetchone()
                 total_warns = total_warns[0] if total_warns else 0
@@ -159,19 +160,20 @@ async def warndel_command(client: Client, message: types.Message):
         return
     
     try:
-        await init_warns_db()
+        await init_warns_db(chat.id)
+        table_name = f"warns_chat_{abs(chat.id)}"
         
-        # Check if warning exists and is in this chat
+        # Check if warning exists
         async with aiosqlite.connect("db/warns.db") as connection:
             async with connection.cursor() as cursor:
                 await cursor.execute(
-                    "SELECT user_id, reason, status FROM warns WHERE id = ? AND chat_id = ?",
-                    (warn_id, chat.id)
+                    f"SELECT user_id, reason, status FROM {table_name} WHERE id = ?",
+                    (warn_id,)
                 )
                 warning = await cursor.fetchone()
                 
                 if not warning:
-                    await message.reply(f"Warning #{warn_id} not found in this chat.")
+                    await message.reply(f"Warning #{warn_id} not found.")
                     return
                 
                 if warning[2] == 'deleted':
@@ -180,7 +182,7 @@ async def warndel_command(client: Client, message: types.Message):
                 
                 # Mark warning as deleted
                 await cursor.execute(
-                    "UPDATE warns SET status = 'deleted' WHERE id = ?",
+                    f"UPDATE {table_name} SET status = 'deleted' WHERE id = ?",
                     (warn_id,)
                 )
                 await connection.commit()
@@ -223,14 +225,15 @@ async def warnsuser_command(client: Client, message: types.Message):
         return
     
     try:
-        await init_warns_db()
+        await init_warns_db(chat.id)
+        table_name = f"warns_chat_{abs(chat.id)}"
         
         # Get all active warnings for the user in this chat
         async with aiosqlite.connect("db/warns.db") as connection:
             async with connection.cursor() as cursor:
                 await cursor.execute(
-                    "SELECT id, warned_by, reason, warn_date FROM warns WHERE chat_id = ? AND user_id = ? AND status = 'active' ORDER BY warn_date DESC",
-                    (chat.id, user.id)
+                    f"SELECT id, warned_by, reason, warn_date FROM {table_name} WHERE user_id = ? AND status = 'active' ORDER BY warn_date DESC",
+                    (user.id,)
                 )
                 warnings = await cursor.fetchall()
         
@@ -303,14 +306,15 @@ async def warnslist_command(client: Client, message: types.Message):
     await save_usage(chat, "warnslist")
     
     try:
-        await init_warns_db()
+        await init_warns_db(chat.id)
+        table_name = f"warns_chat_{abs(chat.id)}"
         
         # Get all active warnings in this chat
         async with aiosqlite.connect("db/warns.db") as connection:
             async with connection.cursor() as cursor:
                 await cursor.execute(
-                    "SELECT id, user_id, warned_by, reason, warn_date FROM warns WHERE chat_id = ? AND status = 'active' ORDER BY warn_date DESC",
-                    (chat.id,)
+                    f"SELECT id, user_id, warned_by, reason, warn_date FROM {table_name} WHERE status = 'active' ORDER BY warn_date DESC",
+                    ()
                 )
                 warnings = await cursor.fetchall()
         
