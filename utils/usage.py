@@ -43,4 +43,3 @@ async def save_usage(chat_object, command_name: str):
                     (row[2] + 1, chat_id)
                 )
             await connection.commit()
-            await connection.commit()
