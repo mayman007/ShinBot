@@ -311,7 +311,7 @@ async def list_join_dates(client: Client, message: types.Message):
         members.sort(key=lambda m: m['join_date'] if m['join_date'] is not None else datetime.max)
 
         # Display limit for inline message
-        display_limit = 2
+        display_limit = 10
         
         if len(members) <= display_limit:
             # Small group - show all members inline
