@@ -5,39 +5,44 @@ from config import BOT_NAME
 
 # Command categories
 COMMAND_CATEGORIES = {
-    "utility": {
-        "name": "🔧 Utility",
-        "commands": {
-            "/start": "Bot's introduction",
-            "/help": "This message",
-            "/ping": "Get bot's latency",
-            "/yt": "Download videos from YouTube and other sites",
-            "/search": "Search the internet",
-            "/calc": "Calculate mathematical expressions",
-            "/chatid": "Get the current chat ID",
-            "/chatpfp": "Get the current chat picture",
-            "/groupinfo": "Get group's info",
-            "/joindate": "Get each member's join date in the group",
-            "/pfp": "Get user's profile picture",
-            "/feedback": "Send feedback to developers"
-        }
-    },
     "moderation": {
         "name": "🛡️ Moderation",
         "commands": {
             "/ban": "Ban a user",
-            "/unban": "Unban a user",
-            "/kick": "Kick a user",
-            "/mute": "Mute a user",
-            "/unmute": "Unmute a user",
-            "/promote": "Promote a user to admin",
             "/demote": "Demote a user from admin",
+            "/kick": "Kick a user",
             "/lock": "Lock chat (prevent all members from messaging)",
+            "/mute": "Mute a user",
+            "/promote": "Promote a user to admin",
+            "/unban": "Unban a user",
             "/unlock": "Unlock chat (restore messaging permissions)",
+            "/unmute": "Unmute a user",
             "/warn": "Issue a warning to a user",
             "/warndel": "Delete a warning by ID",
             "/warnslist": "List all active warnings in chat",
             "/warnsuser": "View warnings for a specific user"
+        }
+    },
+    "utility": {
+        "name": "🔧 Utility",
+        "commands": {
+            "/calc": "Calculate mathematical expressions",
+            "/chatid": "Get the current chat ID",
+            "/chatpfp": "Get the current chat picture",
+            "/feedback": "Send feedback to developers",
+            "/groupinfo": "Get group's info",
+            "/help": "This message",
+            "/joindate": "Get each member's join date in the group",
+            "/pfp": "Get user's profile picture",
+            "/ping": "Get bot's latency",
+            "/search": "Search the internet",
+            "/start": "Bot's introduction"
+        }
+    },
+    "video_download": {
+        "name": "⬇️ Video Download",
+        "commands": {
+            "/yt": "Download videos from YouTube and other sites"
         }
     },
     "timer": {
@@ -48,32 +53,37 @@ COMMAND_CATEGORIES = {
             "/timerslist": "Get a list of timers set in this chat"
         }
     },
+    "games": {
+        "name": "🎮 Games",
+        "commands": {
+            "/rps": "Play Rock Paper Scissors",
+            "/slot": "A slot game",
+            "/tictactoe": "Play TicTacToe"
+        }
+    },
     "trivia": {
         "name": "🎉 Trivia",
         "commands": {
-            "/rps": "Play Rock Paper Scissors",
-            "/tictactoe": "Play TicTacToe",
-            "/meme": "Get a random meme from Reddit",
+            "/advice": "Get a random advice",
+            "/affirmation": "Get a random affirmation",
             "/cat": "Get a random cat pic/vid/gif",
-            "/dog": "Get a random dog pic/vid/gif",
-            "/slot": "A slot game",
-            "/echo": "Repeats your words",
-            "/reverse": "Reverse your words",
             "/choose": "Make me choose for you",
             "/coinflip": "Flip a coin",
             "/dadjoke": "Get a random dad joke",
+            "/dog": "Get a random dog pic/vid/gif",
+            "/echo": "Repeats your words",
             "/geekjoke": "Get a random geek joke",
-            "/advice": "Get a random advice",
-            "/affirmation": "Get a random affirmation"
+            "/meme": "Get a random meme from Reddit",
+            "/reverse": "Reverse your words"
         }
     },
     "anime": {
         "name": "🖼️ Anime & Manga",
         "commands": {
+            "/aghpb": "Anime girl holding programming book",
             "/anime": "Search Anime",
-            "/manga": "Search Manga",
             "/character": "Search Anime & Manga characters",
-            "/aghpb": "Anime girl holding programming book"
+            "/manga": "Search Manga"
         }
     },
     "ai": {
@@ -88,13 +98,7 @@ COMMAND_CATEGORIES = {
 async def help_command(client: Client, message: types.Message):
     chat = message.chat
     await save_usage(chat, "help")
-    
-    # Check if user wants moderation commands only (legacy support)
-    args = message.text.split()
-    if len(args) > 1 and args[1].lower() == "mod":
-        await show_category_commands(message, "moderation")
-        return
-    
+
     # Show main help menu with category buttons
     await show_help_menu(message)
 
