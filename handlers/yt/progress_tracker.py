@@ -1,7 +1,6 @@
 import time
 import logging
 from pyrogram.errors import FloodWait
-from pyrogram.types import InlineKeyboardMarkup
 from .file_utils import format_bytes, format_speed, format_eta
 
 logger = logging.getLogger(__name__)

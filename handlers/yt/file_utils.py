@@ -1,6 +1,5 @@
 import os
 import re
-import glob
 from .constants import DOWNLOADS_DIR
 
 def sanitize_filename(filename: str) -> str:

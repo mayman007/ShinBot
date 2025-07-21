@@ -1,14 +1,5 @@
 from pyrogram import Client
-from handlers import handle_search_callback
-from handlers import rps_callback_handler
-from handlers.trivia.tictactoe_commands import tictactoe_callback_handler
-from handlers.yt.yt_callbacks import yt_quality_button, yt_audio_button, yt_subs_callback, ignore_callback, cancel_download_callback
-from handlers import handle_anime_callback
-from handlers import handle_manga_callback
-from handlers import handle_help_callback
-from handlers.moderation.warn_system import handle_warns_pagination
-from handlers.timer.timer import handle_timer_pagination
-
+import handlers
 
 # ---------- General Callback Query Handler ----------
 async def button_click_handler(client: Client, callback_query):
@@ -16,63 +7,63 @@ async def button_click_handler(client: Client, callback_query):
     
     # Handle help callbacks
     if data.startswith("help_"):
-        await handle_help_callback(client, callback_query)
+        await handlers.handle_help_callback(client, callback_query)
         return
     
     # Handle search navigation callbacks
     if data.startswith("search_"):
-        await handle_search_callback(client, callback_query)
+        await handlers.handle_search_callback(client, callback_query)
         return
     
     # Handle RPS callbacks
     if data.startswith("rps_"):
-        await rps_callback_handler(client, callback_query)
+        await handlers.rps_callback_handler(client, callback_query)
         return
     
     # Handle TicTacToe callbacks
     if data.startswith("ttt_"):
-        await tictactoe_callback_handler(client, callback_query)
+        await handlers.tictactoe_callback_handler(client, callback_query)
         return
     
     # Handle warns pagination callbacks
     if data.startswith("warnslist_") or data.startswith("warnsuser_"):
-        await handle_warns_pagination(client, callback_query)
+        await handlers.handle_warns_pagination(client, callback_query)
         return
     
     # Handle timer pagination callbacks
     if data.startswith("timerslist_") or data.startswith("timerdel_"):
-        await handle_timer_pagination(client, callback_query)
+        await handlers.handle_timer_pagination(client, callback_query)
         return
     
     # Handle YouTube callbacks
     if data.startswith("yt_"):
         if data.startswith("yt_audio_"):
-            await yt_audio_button(client, callback_query)
+            await handlers.yt_audio_button(client, callback_query)
         else:
-            await yt_quality_button(client, callback_query)
+            await handlers.yt_quality_button(client, callback_query)
         return
     
     # Handle subtitle callbacks
     if data.startswith("subs_"):
-        await yt_subs_callback(client, callback_query)
+        await handlers.yt_subs_callback(client, callback_query)
         return
     
     # Handle cancel download callbacks
     if data.startswith("cancel_"):
-        await cancel_download_callback(client, callback_query)
+        await handlers.cancel_download_callback(client, callback_query)
         return
     
     # Handle ignore callback
     if data == "ignore":
-        await ignore_callback(client, callback_query)
+        await handlers.ignore_callback(client, callback_query)
         return
     
     # Handle anime pagination callbacks
     if data.startswith("anime"):
-        await handle_anime_callback(client, callback_query)
+        await handlers.handle_anime_callback(client, callback_query)
         return
     
     # Handle manga pagination callbacks  
     if data.startswith("manga"):
-        await handle_manga_callback(client, callback_query)
+        await handlers.handle_manga_callback(client, callback_query)
         return

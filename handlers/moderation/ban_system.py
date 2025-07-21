@@ -1,11 +1,10 @@
 import logging
-from pyrogram import Client, filters
-from pyrogram.types import Message, ChatMember
+from pyrogram import Client
+from pyrogram.types import Message
 from pyrogram.errors import UserNotParticipant, ChatAdminRequired, UserAdminInvalid
-from pyrogram.handlers import MessageHandler
 from utils.decorators import admin_only
 from utils.helpers import extract_user_and_reason
-from utils.usage import save_usage  # Assuming save_usage is defined in utils.db
+from utils.usage import save_usage
 
 logger = logging.getLogger(__name__)
 

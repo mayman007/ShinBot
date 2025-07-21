@@ -1,9 +1,7 @@
-import asyncio
 import datetime
 import aiosqlite
 import logging
 from pyrogram import Client, types
-from pyrogram.errors import UserAdminInvalid
 from utils.usage import save_usage
 from utils.decorators import admin_only
 from utils.helpers import extract_user_and_reason, split_text_into_pages

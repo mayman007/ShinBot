@@ -1,6 +1,6 @@
 import logging
 from pyrogram import Client, types
-from pyrogram.errors import ChatAdminRequired, UserAdminInvalid
+from pyrogram.errors import ChatAdminRequired
 from utils.decorators import admin_only
 from utils.usage import save_usage
 
