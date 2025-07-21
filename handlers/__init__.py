@@ -12,8 +12,9 @@ from .timer.timer import *
 from .timer.timer_scheduler import *
 from .trivia.trivia_commands import *
 from .trivia.trivia_events import *
-from .trivia.rps import *
-from .trivia.tictactoe import *
+from .games.rps import *
+from .games.tictactoe import *
+from .games.slot import *
 from .utility.utility_commands import *
 from .utility.info_commands import *
 from .utility.help import *
