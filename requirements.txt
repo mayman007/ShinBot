@@ -2,6 +2,7 @@ pyrofork
 TGCrypto
 aiohttp
 aiosqlite
+aiofiles
 python-dotenv
 praw
 tcp_latency
