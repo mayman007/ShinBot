@@ -26,14 +26,15 @@ async def imagine_command(client: Client, message: types.Message):
         async with aiohttp.ClientSession(headers=headers) as session:
             async with session.post(API_URL, json=payload) as response:
                 if response.status != 200:
-                    print(f"API Error: {response.status} - {await response.text()}")
-                    await waiting_msg.edit("Failed to generate image. Please try again later.")
+                    error_text = await response.text()
+                    print(f"API Error: {response.status} - {error_text}")
+                    await waiting_msg.edit(f"Failed to generate image. API Error {response.status}: {error_text}")
                     return
                 content_type = response.headers.get('content-type', '')
                 if not content_type.startswith('image/'):
                     error_text = await response.text()
                     print(f"Invalid response type: {content_type}, Response: {error_text}")
-                    await waiting_msg.edit("Image generation failed. The model might be loading, please try again in a minute.")
+                    await waiting_msg.edit(f"Image generation failed. Error: {error_text}")
                     return
                 image_bytes = await response.read()
         
@@ -43,4 +44,4 @@ async def imagine_command(client: Client, message: types.Message):
         await waiting_msg.delete()
     except Exception as e:
         print(f"Imagine Error: {e}")
-        await message.reply("Sorry, I ran into an error.")
+        await message.reply(f"Sorry, I ran into an error: {str(e)}")

@@ -15,6 +15,9 @@ async def gemini_command(client: Client, message: types.Message):
         if prompt == "":
             await message.reply("Please write your prompt on the same message.")
             return
+        
+        waiting_msg = await message.reply("Wait a moment...")
+        
         api_key = GEMINI_API_KEY
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel(GEMINI_MODEL)
@@ -28,7 +31,9 @@ async def gemini_command(client: Client, message: types.Message):
                 await asyncio.sleep(0.5)
         else:
             await message.reply(f"**{GEMINI_MODEL.title()}:** {response_text}")
+        
+        await waiting_msg.delete()
     except Exception as e:
         print(f"Gemini error: {e}")
-        await message.reply("Sorry, an unexpected error had occured.")
+        await message.reply(f"Sorry, an unexpected error had occured: {str(e)}")
 
