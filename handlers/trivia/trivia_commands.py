@@ -38,8 +38,15 @@ async def meme_command(client: Client, message: types.Message):
             check_for_async=False
         )
         
-        # Choose a meme subreddit
-        subreddit = reddit.subreddit("Animemes")
+        # Check if user specified "anime" parameter
+        parts = message.text.split()
+        if len(parts) > 1 and parts[1].lower() == "anime":
+            subreddit_name = "animemes"
+        else:
+            subreddit_name = "memes"
+        
+        # Choose the appropriate subreddit
+        subreddit = reddit.subreddit(subreddit_name)
         
         # Get hot submissions
         all_subs = []
