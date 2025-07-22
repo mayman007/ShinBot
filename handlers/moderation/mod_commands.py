@@ -5,7 +5,7 @@ from pyrogram.errors import UserNotParticipant, ChatAdminRequired, UserAdminInva
 from utils.decorators import admin_only
 from utils.helpers import extract_user_and_reason
 from pyrogram import types
-from utils.usage import save_usage  # Import the usage tracking function
+from utils.usage import save_usage
 
 logger = logging.getLogger(__name__)
 

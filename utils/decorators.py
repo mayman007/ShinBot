@@ -1,6 +1,6 @@
 from functools import wraps
 from pyrogram.types import Message
-from pyrogram.errors import ChatAdminRequired, UserNotParticipant, UserAdminInvalid
+from pyrogram.errors import UserAdminInvalid
 import logging
 
 logger = logging.getLogger(__name__)
@@ -79,6 +79,20 @@ def admin_only(func):
     @wraps(func)
     async def wrapper(client, message: Message):
         try:
+            # First check if bot is admin (except in private chats)
+            chat = await client.get_chat(message.chat.id)
+            if chat.type != "private":
+                try:
+                    bot_member = await client.get_chat_member(message.chat.id, "me")
+                    bot_status_str = str(bot_member.status).lower()
+                    if not ('administrator' in bot_status_str or 'creator' in bot_status_str or 'owner' in bot_status_str):
+                        await message.reply("❌ I need administrator permissions to execute admin commands.")
+                        return
+                except Exception as e:
+                    logger.error(f"Could not check bot admin status: {e}")
+                    await message.reply("❌ Unable to verify bot permissions.")
+                    return
+            
             # Use the robust admin checking function
             is_admin = await check_admin_permissions(client, message.chat.id, message.from_user.id)
             if not is_admin:
