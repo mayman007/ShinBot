@@ -10,7 +10,7 @@ from utils.usage import save_usage
 logger = logging.getLogger(__name__)
 
 async def check_bot_promote_permissions(client: Client, chat_id: int) -> tuple[bool, str]:
-    """Check if bot has permission to promote/demote members"""
+    """Check if bot has permission to promote members"""
     try:
         me = await client.get_me()
         bot_member = await client.get_chat_member(chat_id, me.id)
@@ -136,102 +136,6 @@ async def promote_user(client: Client, message: Message):
     except Exception as e:
         await message.reply(f"❌ Error promoting user: {str(e)}")
         logger.error(f"Error in promote command: {e}")
-
-@admin_only
-async def demote_user(client: Client, message: Message):
-    """Demote a user from administrator"""
-    chat = message.chat
-    await save_usage(chat, "demote")
-    
-    try:
-        # Check bot permissions first
-        can_promote, error_msg = await check_bot_promote_permissions(client, message.chat.id)
-        if not can_promote:
-            await message.reply(f"❌ {error_msg}")
-            return
-        
-        user, reason = await extract_user_and_reason(client, message)
-        if not user:
-            await message.reply("❌ Please specify a user to demote.\n**Usage:** `/demote @username [reason]` or reply to a message with `/demote [reason]`")
-            return
-        
-        # Check if trying to demote yourself
-        if user.id == message.from_user.id:
-            await message.reply("❌ You cannot demote yourself!")
-            return
-        
-        # Check if trying to demote the bot
-        me = await client.get_me()
-        if user.id == me.id:
-            await message.reply("❌ I cannot demote myself!")
-            return
-        
-        # Check if user is actually an admin
-        try:
-            member = await client.get_chat_member(message.chat.id, user.id)
-            
-            # Use the actual ChatMemberStatus enum values
-            if member.status == "creator":
-                await message.reply(f"❌ Cannot demote {user.first_name} - user is the chat owner.")
-                return
-                
-        except UserNotParticipant:
-            await message.reply(f"❌ {user.first_name} is not in this chat.")
-            return
-        
-        # Try to demote the user
-        try:
-            await client.promote_chat_member(
-                message.chat.id, 
-                user.id,
-                privileges=types.ChatPrivileges(
-                    can_manage_chat=False,
-                    can_delete_messages=False,
-                    can_manage_video_chats=False,
-                    can_restrict_members=False,
-                    can_promote_members=False,
-                    can_change_info=False,
-                    can_invite_users=False,
-                    can_pin_messages=False,
-                    can_manage_topics=False
-                )
-            )
-            
-            demote_text = f"⬇️ **User Demoted**\n"
-            demote_text += f"**User:** {user.mention}\n"
-            demote_text += f"**Admin:** {message.from_user.mention}\n"
-            if reason:
-                demote_text += f"**Reason:** {reason}"
-            
-            await message.reply(demote_text)
-            logger.info(f"User {user.id} demoted in chat {message.chat.id} by {message.from_user.id}")
-            
-        except Exception as demote_error:
-            error_msg = str(demote_error).lower()
-            logger.error(f"Demote error details: {demote_error}")
-            
-            if "bot_channels_na" in error_msg:
-                # This specific error means Telegram doesn't allow this bot action
-                await message.reply(
-                    f"❌ Cannot demote {user.first_name}.\n\n"
-                    "**Reason:** Telegram restricts bots from demoting this admin due to security policies.\n\n"
-                    "**Solution:** The group owner or another admin with sufficient privileges needs to demote this user manually through the group settings."
-                )
-            elif "user_creator" in error_msg:
-                await message.reply(f"❌ Cannot demote {user.first_name} - user is the chat owner.")
-            elif "user_admin_invalid" in error_msg:
-                await message.reply(f"❌ Cannot demote {user.first_name} - user has protected admin status.")
-            else:
-                await message.reply(f"❌ Error demoting user: {str(demote_error)}")
-        
-    except ChatAdminRequired:
-        await message.reply("❌ I need admin privileges with 'Add new admins' permission to demote users.")
-    except Exception as e:
-        await message.reply(f"❌ Error demoting user: {str(e)}")
-        logger.error(f"Error in demote command: {e}")
-    except Exception as e:
-        await message.reply(f"❌ Error demoting user: {str(e)}")
-        logger.error(f"Error in demote command: {e}")
 
 @admin_only
 async def kick_user(client: Client, message: Message):

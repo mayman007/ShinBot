@@ -9,7 +9,6 @@ COMMAND_CATEGORIES = {
         "name": "🛡️ Moderation",
         "commands": {
             "/ban": "Ban a user",
-            "/demote": "Demote a user from admin",
             "/kick": "Kick a user",
             "/lock": "Lock chat (prevent all members from messaging)",
             "/mute": "Mute a user",
