@@ -37,7 +37,7 @@ async def download_video(url: str, video_format_id: str, best_audio: Optional[Di
     safe_title = sanitize_filename(info.get("title", "video"))
     
     # Create user directory and set filename
-    user_downloads_dir = get_user_downloads_dir(user_id)
+    user_downloads_dir = await get_user_downloads_dir(user_id)
     expected_filename = os.path.join(user_downloads_dir, f"{safe_title} - {resolution}.mp4")
     
     # Update the progress message to show we're now initializing the download
@@ -311,10 +311,10 @@ async def download_video(url: str, video_format_id: str, best_audio: Optional[Di
             # Clean up any partial files
             try:
                 if os.path.exists(expected_filename):
-                    safe_delete(expected_filename)
+                    await safe_delete(expected_filename)
                 
                 # Also clean up any temp files in the user directory
-                user_downloads_dir = get_user_downloads_dir(user_id)
+                user_downloads_dir = await get_user_downloads_dir(user_id)
                 temp_patterns = [
                     os.path.join(user_downloads_dir, f"*{safe_title}*.part"),
                     os.path.join(user_downloads_dir, f"*{safe_title}*.tmp"),
@@ -324,11 +324,11 @@ async def download_video(url: str, video_format_id: str, best_audio: Optional[Di
                 
                 for pattern in temp_patterns:
                     for temp_file in glob.glob(pattern):
-                        safe_delete(temp_file)
+                        await safe_delete(temp_file)
                         
             except Exception as cleanup_error:
                 logger.error(f"Error during file cleanup: {cleanup_error}")
-            
+    
             # Update UI with cancellation message
             tracker.description = f"Download cancelled: {safe_title} [{resolution}]"
             await tracker.update_progress(0, 1, 0, 0, force=True)
@@ -390,7 +390,7 @@ async def download_audio_by_format(url: str, audio_format_id: str, quality_str: 
     safe_title = sanitize_filename(info.get("title", "audio"))
     
     # Use user-specific directory
-    user_downloads_dir = get_user_downloads_dir(user_id)
+    user_downloads_dir = await get_user_downloads_dir(user_id)
     expected_template = os.path.join(user_downloads_dir, f"{safe_title}.{quality_str}.%(ext)s")
     expected_filename = os.path.join(user_downloads_dir, f"{safe_title}.{quality_str}.mp3")
     
@@ -617,10 +617,10 @@ async def download_audio_by_format(url: str, audio_format_id: str, quality_str: 
             # Clean up any partial files
             try:
                 if os.path.exists(expected_filename):
-                    safe_delete(expected_filename)
+                    await safe_delete(expected_filename)
                 
                 # Clean up temp files
-                user_downloads_dir = get_user_downloads_dir(user_id)
+                user_downloads_dir = await get_user_downloads_dir(user_id)
                 temp_patterns = [
                     os.path.join(user_downloads_dir, f"*{safe_title}*.part"),
                     os.path.join(user_downloads_dir, f"*{safe_title}*.tmp"),
@@ -630,11 +630,11 @@ async def download_audio_by_format(url: str, audio_format_id: str, quality_str: 
                 
                 for pattern in temp_patterns:
                     for temp_file in glob.glob(pattern):
-                        safe_delete(temp_file)
+                        await safe_delete(temp_file)
                         
             except Exception as cleanup_error:
                 logger.error(f"Error during file cleanup: {cleanup_error}")
-            
+    
             # Update progress message with cancellation info
             try:
                 tracker.description = "Audio download cancelled"
@@ -660,7 +660,7 @@ async def download_audio_by_format(url: str, audio_format_id: str, quality_str: 
 
 async def download_subtitles(url: str, lang: str, safe_title: str, user_id: int) -> Optional[str]:
     """Download subtitles in specified language."""
-    user_downloads_dir = get_user_downloads_dir(user_id)
+    user_downloads_dir = await get_user_downloads_dir(user_id)
     outtmpl = os.path.join(user_downloads_dir, safe_title)
     
     # Handle language formatting
@@ -693,10 +693,6 @@ async def download_subtitles(url: str, lang: str, safe_title: str, user_id: int)
         pattern = os.path.join(user_downloads_dir, f"{safe_title}.*.{sub_lang}.*")
         matches = glob.glob(pattern)
         
-    if matches:
-        return matches[0]
-    else:
-        return None
     if matches:
         return matches[0]
     else:

@@ -1,5 +1,7 @@
 import os
 import re
+import aiofiles
+import aiofiles.os
 from .constants import DOWNLOADS_DIR
 
 def sanitize_filename(filename: str) -> str:
@@ -10,18 +12,18 @@ def sanitize_filename(filename: str) -> str:
     sanitized = sanitized.strip().rstrip('.')
     return sanitized[:100] if len(sanitized) > 100 else sanitized
 
-def safe_delete(filepath: str) -> None:
+async def safe_delete(filepath: str) -> None:
     """Safely delete a file if it exists."""
     try:
-        if os.path.exists(filepath):
-            os.remove(filepath)
+        if await aiofiles.os.path.exists(filepath):
+            await aiofiles.os.remove(filepath)
     except Exception as e:
         print(f"Error deleting file {filepath}: {e}")
 
-def get_user_downloads_dir(user_id: int) -> str:
+async def get_user_downloads_dir(user_id: int) -> str:
     """Create and return a user-specific download directory."""
     user_dir = os.path.join(DOWNLOADS_DIR, str(user_id))
-    os.makedirs(user_dir, exist_ok=True)
+    await aiofiles.os.makedirs(user_dir, exist_ok=True)
     return user_dir
 
 def format_bytes(byte_count):

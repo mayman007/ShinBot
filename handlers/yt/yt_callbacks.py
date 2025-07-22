@@ -88,7 +88,7 @@ async def yt_quality_button(client: Client, callback_query):
                     file_size = os.path.getsize(filename)
                     if file_size > MAX_FILESIZE:
                         await callback_query.message.edit(f"Error: File size ({file_size/(1024*1024):.1f} MB) exceeds Telegram's limit of 2 GB.")
-                        safe_delete(filename)
+                        await safe_delete(filename)
                         return
                 else:
                     await callback_query.message.edit("Error: Downloaded file not found.")
@@ -103,7 +103,7 @@ async def yt_quality_button(client: Client, callback_query):
                     yt_data.get('original_msg_id')
                 )
                 
-                safe_delete(filename)
+                await safe_delete(filename)
                 
             except Exception as e:
                 if "cancelled" in str(e).lower():
@@ -197,7 +197,7 @@ async def yt_audio_button(client: Client, callback_query):
                 file_size = os.path.getsize(filename)
                 if file_size > MAX_FILESIZE:
                     await callback_query.message.edit(f"Error: File size ({file_size/(1024*1024):.1f} MB) exceeds Telegram's limit.")
-                    safe_delete(filename)
+                    await safe_delete(filename)
                     return
                     
                 await upload_file_with_progress(
@@ -209,7 +209,7 @@ async def yt_audio_button(client: Client, callback_query):
                     original_msg_id
                 )
                 
-                safe_delete(filename)
+                await safe_delete(filename)
                 
             except Exception as e:
                 if "cancelled" in str(e).lower():
@@ -259,7 +259,7 @@ async def yt_subs_callback(client: Client, callback_query):
             file_size = os.path.getsize(filename)
             if file_size == 0:
                 await callback_query.message.edit(f"Error: Downloaded subtitle file is empty.")
-                safe_delete(filename)
+                await safe_delete(filename)
                 return
             
             with open(filename, "rb") as f:
@@ -275,7 +275,7 @@ async def yt_subs_callback(client: Client, callback_query):
                 reply_to_message_id=original_msg_id,
             )
             
-            safe_delete(filename)
+            await safe_delete(filename)
             await callback_query.message.delete()
             
         except Exception as e:
