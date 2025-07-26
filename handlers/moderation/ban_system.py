@@ -2,13 +2,14 @@ import logging
 from pyrogram import Client
 from pyrogram.types import Message
 from pyrogram.errors import UserNotParticipant, ChatAdminRequired, UserAdminInvalid
-from utils.decorators import admin_only
+from utils.decorators import admin_only, protect_admins
 from utils.helpers import extract_user_and_reason
 from utils.usage import save_usage
 
 logger = logging.getLogger(__name__)
 
 @admin_only
+@protect_admins
 async def ban_user(client: Client, message: Message):
     """Ban a user from the chat"""
     chat = message.chat

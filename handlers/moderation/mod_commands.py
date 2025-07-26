@@ -2,7 +2,7 @@ import logging
 from pyrogram import Client
 from pyrogram.types import Message
 from pyrogram.errors import UserNotParticipant, ChatAdminRequired, UserAdminInvalid
-from utils.decorators import admin_only
+from utils.decorators import admin_only, protect_admins
 from utils.helpers import extract_user_and_reason
 from pyrogram import types
 from utils.usage import save_usage
@@ -138,6 +138,7 @@ async def promote_user(client: Client, message: Message):
         logger.error(f"Error in promote command: {e}")
 
 @admin_only
+@protect_admins
 async def kick_user(client: Client, message: Message):
     """Kick a user from the chat"""
     chat = message.chat

@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from pyrogram import Client, types
 from pyrogram.errors import UserAdminInvalid
 from utils.usage import save_usage
-from utils.decorators import admin_only
+from utils.decorators import admin_only, protect_admins
 from utils.helpers import extract_user_and_reason
 
 logger = logging.getLogger(__name__)
@@ -143,6 +143,7 @@ async def is_user_muted(client: Client, chat_id: int, user_id: int) -> bool:
 # Mute command
 # ---------------------------
 @admin_only
+@protect_admins
 async def mute_command(client: Client, message: types.Message):
     chat = message.chat
     await save_usage(chat, "mute")

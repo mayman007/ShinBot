@@ -1,7 +1,9 @@
 from functools import wraps
 from pyrogram.types import Message
 from pyrogram.errors import UserAdminInvalid
+from pyrogram.enums import ChatMemberStatus
 import logging
+from .helpers import extract_user_and_reason
 
 logger = logging.getLogger(__name__)
 
@@ -10,7 +12,7 @@ async def check_admin_permissions(client, chat_id: int, user_id: int):
     try:
         # First, check if this is a private chat
         chat = await client.get_chat(chat_id)
-        if chat.type == "private":
+        if chat.type.name.lower() == "private":
             logger.info(f"Private chat detected, allowing command for user {user_id}")
             return True
         
@@ -20,8 +22,7 @@ async def check_admin_permissions(client, chat_id: int, user_id: int):
         try:
             bot_member = await client.get_chat_member(chat_id, "me")
             logger.info(f"Bot status in chat: {bot_member.status}")
-            status_str = str(bot_member.status).lower()
-            if not ('administrator' in status_str or 'creator' in status_str or 'owner' in status_str):
+            if bot_member.status not in [ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR]:
                 logger.warning("Bot is not an admin in this chat")
                 return False
         except Exception as e:
@@ -31,15 +32,8 @@ async def check_admin_permissions(client, chat_id: int, user_id: int):
         try:
             member = await client.get_chat_member(chat_id, user_id)
             logger.info(f"User {user_id} status: {member.status}")
-            
-            status_str = str(member.status).lower()
-            if (member.status == 'creator' or 
-                member.status == 'owner' or 
-                'owner' in status_str or 
-                'creator' in status_str or
-                member.status == 'administrator' or 
-                'administrator' in status_str or
-                'admin' in status_str):
+
+            if member.status in [ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR]:
                 logger.info(f"User {user_id} is admin/owner")
                 return True
             else:
@@ -81,11 +75,10 @@ def admin_only(func):
         try:
             # First check if bot is admin (except in private chats)
             chat = await client.get_chat(message.chat.id)
-            if chat.type != "private":
+            if chat.type.name.lower() != "private":
                 try:
                     bot_member = await client.get_chat_member(message.chat.id, "me")
-                    bot_status_str = str(bot_member.status).lower()
-                    if not ('administrator' in bot_status_str or 'creator' in bot_status_str or 'owner' in bot_status_str):
+                    if bot_member.status not in [ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR]:
                         await message.reply("❌ I need administrator permissions to execute admin commands.")
                         return
                 except Exception as e:
@@ -106,4 +99,41 @@ def admin_only(func):
             await message.reply("❌ An unexpected error occurred.")
             return
     
+    return wrapper
+
+def protect_admins(func):
+    """
+    Decorator to prevent a command from affecting another admin.
+    It extracts the target user from the message and checks if they are an admin.
+    This should be applied after @admin_only.
+    """
+    @wraps(func)
+    async def wrapper(client, message: Message):
+        # This decorator should only apply in group chats where admin concepts exist
+        chat = await client.get_chat(message.chat.id)
+        if chat.type.name.lower() == "private":
+            return await func(client, message)
+
+        # Extract the user being targeted by the command
+        target_user, _ = await extract_user_and_reason(client, message)
+
+        if not target_user:
+            # Let the command handler deal with no user found.
+            # The handler should reply with "user not found" or similar.
+            return await func(client, message)
+
+        # Prevent users from targeting themselves
+        if target_user.id == message.from_user.id:
+            await message.reply("❌ You cannot perform this action on yourself.")
+            return
+
+        # Check if the target user is an admin
+        is_target_admin = await check_admin_permissions(client, message.chat.id, target_user.id)
+        if is_target_admin:
+            await message.reply("❌ You cannot use this command on an administrator.")
+            return
+
+        # If target is not an admin, proceed with the original function
+        return await func(client, message)
+
     return wrapper
