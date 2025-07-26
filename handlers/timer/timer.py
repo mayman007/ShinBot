@@ -1,7 +1,7 @@
 import asyncio
 import datetime
 import aiosqlite
-from utils.helpers import split_text_into_pages
+from utils.helpers import create_pagination_keyboard, split_text_into_pages
 from utils.usage import save_usage
 from pyrogram import Client, types
 from handlers.timer.timer_scheduler import get_chat_timer_table, schedule_timer, cancel_timer
@@ -9,36 +9,6 @@ from utils.decorators import check_admin_permissions
 
 # Store pagination data temporarily
 timer_pagination_data = {}
-
-def create_timer_pagination_keyboard(current_page, total_pages, callback_prefix):
-    """Create pagination keyboard with Previous/Next buttons for timers."""
-    keyboard = []
-    buttons = []
-    
-    # Previous button
-    if current_page > 1:
-        buttons.append(types.InlineKeyboardButton(
-            "◀️ Previous", 
-            callback_data=f"{callback_prefix}_{current_page - 1}"
-        ))
-    
-    # Page indicator
-    buttons.append(types.InlineKeyboardButton(
-        f"{current_page}/{total_pages}", 
-        callback_data="ignore"
-    ))
-    
-    # Next button
-    if current_page < total_pages:
-        buttons.append(types.InlineKeyboardButton(
-            "Next ▶️", 
-            callback_data=f"{callback_prefix}_{current_page + 1}"
-        ))
-    
-    if buttons:
-        keyboard.append(buttons)
-    
-    return types.InlineKeyboardMarkup(keyboard) if keyboard else None
 
 # ---------------------------
 # Timer Command Handler
@@ -284,7 +254,7 @@ async def list_timers_command(client: Client, message: types.Message):
         }
         
         # Send first page with navigation
-        keyboard = create_timer_pagination_keyboard(1, len(pages), callback_prefix)
+        keyboard = await create_pagination_keyboard(1, len(pages), callback_prefix)
         await message.reply(pages[0], reply_markup=keyboard)
 
 # Remove timer command
@@ -434,7 +404,7 @@ async def remove_timer_command(client: Client, message: types.Message):
         }
         
         # Send first page with navigation
-        keyboard = create_timer_pagination_keyboard(1, len(pages), callback_prefix)
+        keyboard = await create_pagination_keyboard(1, len(pages), callback_prefix)
         await message.reply(pages[0], reply_markup=keyboard)
 
 # ---------------------------
@@ -476,7 +446,7 @@ async def handle_timer_pagination(client: Client, callback_query):
             return
         
         # Create new keyboard
-        keyboard = create_timer_pagination_keyboard(page_num, len(pages), callback_prefix)
+        keyboard = await create_pagination_keyboard(page_num, len(pages), callback_prefix)
         
         # Edit message with new page
         await callback_query.edit_message_text(

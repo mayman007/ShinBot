@@ -4,42 +4,12 @@ import logging
 from pyrogram import Client, types
 from utils.usage import save_usage
 from utils.decorators import admin_only
-from utils.helpers import extract_user_and_reason, split_text_into_pages
+from utils.helpers import create_pagination_keyboard, extract_user_and_reason, split_text_into_pages
 
 logger = logging.getLogger(__name__)
 
 # Store pagination data temporarily
 pagination_data = {}
-
-async def create_pagination_keyboard(current_page, total_pages, callback_prefix):
-    """Create pagination keyboard with Previous/Next buttons."""
-    keyboard = []
-    buttons = []
-    
-    # Previous button
-    if current_page > 1:
-        buttons.append(types.InlineKeyboardButton(
-            "◀️ Previous", 
-            callback_data=f"{callback_prefix}_{current_page - 1}"
-        ))
-    
-    # Page indicator
-    buttons.append(types.InlineKeyboardButton(
-        f"{current_page}/{total_pages}", 
-        callback_data="ignore"
-    ))
-    
-    # Next button
-    if current_page < total_pages:
-        buttons.append(types.InlineKeyboardButton(
-            "Next ▶️", 
-            callback_data=f"{callback_prefix}_{current_page + 1}"
-        ))
-    
-    if buttons:
-        keyboard.append(buttons)
-    
-    return types.InlineKeyboardMarkup(keyboard) if keyboard else None
 
 async def init_warns_db(chat_id):
     """Initialize the warns database for a specific chat."""

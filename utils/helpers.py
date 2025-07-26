@@ -1,6 +1,6 @@
 import asyncio
 from pyrogram import Client
-from pyrogram.types import Message
+from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
 import logging
 
 logger = logging.getLogger(__name__)
@@ -130,3 +130,33 @@ async def split_text_into_pages(lines, max_length=1000):
         pages.append(current_page.strip())
     
     return pages
+
+async def create_pagination_keyboard(current_page, total_pages, callback_prefix):
+    """Create pagination keyboard with Previous/Next buttons."""
+    keyboard = []
+    buttons = []
+    
+    # Previous button
+    if current_page > 1:
+        buttons.append(InlineKeyboardButton(
+            "◀️ Previous", 
+            callback_data=f"{callback_prefix}_{current_page - 1}"
+        ))
+    
+    # Page indicator
+    buttons.append(InlineKeyboardButton(
+        f"{current_page}/{total_pages}", 
+        callback_data="ignore"
+    ))
+    
+    # Next button
+    if current_page < total_pages:
+        buttons.append(InlineKeyboardButton(
+            "Next ▶️", 
+            callback_data=f"{callback_prefix}_{current_page + 1}"
+        ))
+    
+    if buttons:
+        keyboard.append(buttons)
+    
+    return InlineKeyboardMarkup(keyboard) if keyboard else None
