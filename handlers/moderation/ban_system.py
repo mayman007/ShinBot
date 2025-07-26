@@ -2,11 +2,14 @@ import logging
 from pyrogram import Client
 from pyrogram.types import Message
 from pyrogram.errors import UserNotParticipant, ChatAdminRequired, UserAdminInvalid
+from pyrogram.enums import ChatMembersFilter
 from utils.decorators import admin_only, protect_admins
-from utils.helpers import extract_user_and_reason
+from utils.helpers import create_pagination_keyboard, extract_user_and_reason, split_text_into_pages
 from utils.usage import save_usage
 
 logger = logging.getLogger(__name__)
+
+pagination_data = {}
 
 @admin_only
 @protect_admins
@@ -82,16 +85,6 @@ async def unban_user(client: Client, message: Message):
             await message.reply("❌ Please specify a user to unban.\n**Usage:** `/unban @username [reason]` or reply to a message with `/unban [reason]`")
             return
         
-        # Check if user is actually banned
-        try:
-            member = await client.get_chat_member(message.chat.id, user.id)
-            if member.status not in ["kicked", "banned"]:
-                await message.reply(f"❌ {user.first_name} is not banned.")
-                return
-        except UserNotParticipant:
-            # User is not in chat, try to unban anyway
-            pass
-        
         # Unban the user
         await client.unban_chat_member(message.chat.id, user.id)
         
@@ -109,3 +102,56 @@ async def unban_user(client: Client, message: Message):
     except Exception as e:
         await message.reply(f"❌ Error unbanning user: {str(e)}")
         logger.error(f"Error in unban command: {e}")
+
+# ---------------------------
+# List all banned users command (Final Correction)
+# ---------------------------
+@admin_only
+async def banslist_command(client: Client, message: Message):
+    """Lists all banned users in the chat."""
+    chat = message.chat
+    sender = message.from_user
+    
+    logger.info(f"Banslist command called by user {sender.id} in chat {chat.id}")
+    await save_usage(chat, "banslist")
+    
+    try:
+        banned_members = []
+        async for member in client.get_chat_members(chat.id, filter=ChatMembersFilter.BANNED):
+            banned_members.append(member)
+
+        if not banned_members:
+            await message.reply("✅ No users are currently banned in this chat.")
+            return
+            
+        lines = [f"🔨 **Banned Users in {chat.title or 'this chat'}** ({len(banned_members)} total)\n"]
+        
+        for member in banned_members:
+            # We can only get the user's information, not who banned them or why.
+            user = member.user
+            lines.append(f"👤 {user.mention} (`{user.id}`)")
+        
+        # Pagination logic remains the same
+        pages = await split_text_into_pages(lines)
+        
+        if len(pages) == 1:
+            # Add a newline at the end for better spacing in the final message
+            final_text = "\n".join(lines)
+            await message.reply(final_text, disable_web_page_preview=True)
+        else:
+            callback_prefix = f"banslist_{chat.id}"
+            
+            pagination_data[callback_prefix] = {
+                'pages': pages,
+                'chat_title': chat.title or 'this chat',
+                'user_id': sender.id
+            }
+            
+            keyboard = await create_pagination_keyboard(1, len(pages), callback_prefix)
+            await message.reply(pages[0], reply_markup=keyboard, disable_web_page_preview=True)
+            
+    except ChatAdminRequired:
+        await message.reply("❌ I need to be an admin with the 'can_restrict_members' permission to see the ban list.")
+    except Exception as e:
+        logger.error(f"Error in banslist_command for chat {chat.id}: {e}")
+        await message.reply(f"❌ An error occurred while fetching the ban list: {str(e)}")

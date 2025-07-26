@@ -51,6 +51,7 @@ def register_handlers(client: Client):
     client.add_handler(MessageHandler(handlers.warnslist_command, filters.command("warnslist")))
     client.add_handler(MessageHandler(handlers.ban_user, filters.command("ban")))
     client.add_handler(MessageHandler(handlers.unban_user, filters.command("unban")))
+    client.add_handler(MessageHandler(handlers.banslist_command, filters.command("banslist")))
     client.add_handler(MessageHandler(handlers.kick_user, filters.command("kick")))
     client.add_handler(MessageHandler(handlers.promote_user, filters.command("promote")))
     client.add_handler(MessageHandler(handlers.yt_command, filters.command("yt")))
@@ -64,7 +65,7 @@ def register_handlers(client: Client):
         "echo", "ping", "search", "feedback", "calc", "groupinfo", "pfp", "chatpfp", "chatid", "timer",
         "timerslist", "timerdel", "reverse", "slot", "coinflip", "geekjoke", "dadjoke", "tictactoe",
         "dog", "cat", "affirmation", "advice", "choose", "rps", "yt", "warn", "warndel", "warnsuser",
-        "warnslist", "ban", "unban", "kick", "mute", "unmute", "promote"
+        "warnslist", "ban", "unban", "banslist", "kick", "mute", "unmute", "promote"
     ]
 
     # Add conditional commands to the list
