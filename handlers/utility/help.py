@@ -9,9 +9,12 @@ COMMAND_CATEGORIES = {
         "name": "🛡️ Moderation",
         "commands": {
             "/ban": "Ban a user",
+            "/banslist": "List all active bans in chat",
             "/kick": "Kick a user",
             "/lock": "Lock chat (prevent all members from messaging)",
             "/mute": "Mute a user",
+            "/mutelist": "List all active mutes in chat",
+            "/muteuser": "Mute a user",
             "/promote": "Promote a user to admin",
             "/unban": "Unban a user",
             "/unlock": "Unlock chat (restore messaging permissions)",
