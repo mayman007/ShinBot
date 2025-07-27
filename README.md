@@ -1,11 +1,12 @@
-<center>
+<div align="center">
 
 # Shin Bot
 
 A feature-rich, asynchronous Telegram bot built with Pyrogram. This bot provides a wide array of functionalities, including powerful moderation tools, AI-powered features, information utilities, games, and much more.
 
 [![View The Bot](https://img.shields.io/badge/View%20The%20Bot-Telegram-blue.svg?logo=telegram)](https://t.me/shinobi7kbot)
-</center>
+
+</div>
 
 ## Features
 
