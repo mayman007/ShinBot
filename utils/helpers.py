@@ -17,93 +17,110 @@ async def extract_user_and_reason(client: Client, message: Message):
         command_parts = message.text.split(' ', 1)
         if len(command_parts) > 1:
             reason = command_parts[1].strip()
+        logger.debug(f"User extracted from reply: {user.first_name} (ID: {user.id})")
         return user, reason
     
-    # Check entities first for mentions (handles text mentions and @ mentions)
+    # Check for entities in the message
     if message.entities:
-        logger.debug(f"Found {len(message.entities)} entities in message: {message.text}")
-        for entity in message.entities:
-            logger.debug(f"Entity type: {entity.type}, offset: {entity.offset}, length: {entity.length}")
-            if entity.type == "mention":
-                # Extract username from mention (with @)
+        logger.debug(f"Message text: '{message.text}'")
+        logger.debug(f"Found {len(message.entities)} entities")
+        
+        for i, entity in enumerate(message.entities):
+            logger.debug(f"Entity {i}: type={entity.type}, offset={entity.offset}, length={entity.length}")
+            
+            # Handle text_mention (display name mentions without @)
+            if entity.type.name == "TEXT_MENTION" or entity.type == "text_mention":
+                if hasattr(entity, 'user') and entity.user:
+                    user = entity.user
+                    logger.debug(f"Found text_mention: {user.first_name} {user.last_name or ''} (ID: {user.id})")
+                    
+                    # Extract reason from everything after this entity
+                    mention_end = entity.offset + entity.length
+                    if mention_end < len(message.text):
+                        reason_text = message.text[mention_end:].strip()
+                        # Clean leading punctuation
+                        reason_text = reason_text.lstrip('.,!?;: ')
+                        if reason_text:
+                            reason = reason_text
+                    
+                    return user, reason
+            
+            # Handle regular mentions with @username
+            elif entity.type.name == "MENTION" or entity.type == "mention":
                 mention_text = message.text[entity.offset:entity.offset + entity.length]
+                logger.debug(f"Found mention: '{mention_text}'")
+                
                 try:
-                    user = await client.get_users(mention_text)
-                    # Get reason from text after the mention
-                    # Handle cases where there might be punctuation after mention
-                    after_mention = message.text[entity.offset + entity.length:].strip()
-                    if after_mention.startswith(','):
-                        after_mention = after_mention[1:].strip()
-                    if after_mention:
-                        reason = after_mention
-                    break
+                    # Get user by username (with or without @)
+                    username = mention_text.lstrip('@')
+                    user = await client.get_users(username)
+                    logger.debug(f"Resolved mention to user: {user.first_name} {user.last_name or ''} (ID: {user.id})")
+                    
+                    # Extract reason from everything after this entity
+                    mention_end = entity.offset + entity.length
+                    if mention_end < len(message.text):
+                        reason_text = message.text[mention_end:].strip()
+                        # Clean leading punctuation
+                        reason_text = reason_text.lstrip('.,!?;: ')
+                        if reason_text:
+                            reason = reason_text
+                    
+                    return user, reason
+                    
                 except Exception as e:
-                    logger.warning(f"Could not get user from mention '{mention_text}': {e}")
+                    logger.warning(f"Could not resolve mention '{mention_text}': {e}")
                     continue
-            elif entity.type == "text_mention":
-                # Direct user object from text mention (no @ symbol, contact name)
-                logger.debug(f"Found text_mention for user: {entity.user.first_name if entity.user else 'None'}")
-                user = entity.user
-                # Get reason from text after the mention
-                after_mention = message.text[entity.offset + entity.length:].strip()
-                if after_mention.startswith(','):
-                    after_mention = after_mention[1:].strip()
-                if after_mention:
-                    reason = after_mention
-                break
     
-    # If user found from entities, return early
-    if user:
-        logger.debug(f"User found from entities: {user.first_name}")
-        return user, reason
+    # Fallback: Parse command arguments
+    logger.debug("No entities found or no user extracted from entities, trying command arguments")
     
-    # Parse command arguments as fallback
-    logger.debug("No user found from entities, trying command arguments")
+    if not message.text:
+        logger.debug("No message text available")
+        return None, None
+    
     command_parts = message.text.split()
+    logger.debug(f"Command parts: {command_parts}")
+    
     if len(command_parts) < 2:
+        logger.debug("Not enough command parts")
         return None, None
     
     user_identifier = command_parts[1]
+    logger.debug(f"Trying to resolve user identifier: '{user_identifier}'")
     
-    # Clean the user identifier from trailing punctuation
-    if user_identifier.startswith('@'):
-        # Remove @ symbol and clean trailing punctuation
-        username = user_identifier[1:].rstrip('.,!?;:')
-        user_identifier = username
-    else:
-        # Clean trailing punctuation for non-@ identifiers too
-        user_identifier = user_identifier.rstrip('.,!?;:')
+    # Clean the user identifier
+    cleaned_identifier = user_identifier.strip('.,!?;:')
+    if cleaned_identifier.startswith('@'):
+        cleaned_identifier = cleaned_identifier[1:]
     
-    # Skip username resolution if it looks like a display name or contains spaces
-    if not command_parts[1].startswith('@') and not user_identifier.isdigit():
-        # Check if this looks like a display name (contains non-ASCII or spaces in full text)
-        full_name_text = ' '.join(command_parts[1:])
-        if ' ' in full_name_text or any(ord(char) > 127 for char in user_identifier):
-            logger.debug(f"Skipping username resolution for apparent display name: '{full_name_text}'")
+    # Skip if it looks like a display name with spaces or special characters
+    if not user_identifier.startswith('@') and not cleaned_identifier.isdigit():
+        full_text = ' '.join(command_parts[1:])
+        if ' ' in full_text or any(ord(char) > 127 for char in cleaned_identifier):
+            logger.debug(f"Skipping resolution for apparent display name: '{full_text}'")
             return None, None
     
-    # Try different methods to get the user
+    # Try to resolve user
     try:
-        # Method 1: Direct username or user ID
-        if command_parts[1].startswith('@'):
-            # Use cleaned username
-            user = await client.get_users(user_identifier)
-        elif user_identifier.isdigit():
-            # User ID
-            user_id = int(user_identifier)
-            user = await client.get_users(user_id)
+        if user_identifier.startswith('@') or not cleaned_identifier.isdigit():
+            # Username
+            user = await client.get_users(cleaned_identifier)
+            logger.debug(f"Resolved username '{cleaned_identifier}' to user: {user.first_name}")
         else:
-            # Try as username without @
-            user = await client.get_users(user_identifier)
-            
-        # Get reason if provided (everything after user identifier)
+            # User ID
+            user_id = int(cleaned_identifier)
+            user = await client.get_users(user_id)
+            logger.debug(f"Resolved user ID {user_id} to user: {user.first_name}")
+        
+        # Extract reason from remaining parts
         if len(command_parts) > 2:
             reason = ' '.join(command_parts[2:]).strip()
-            
+        
+        return user, reason
+        
     except Exception as e:
-        logger.warning(f"Could not get user from identifier '{command_parts[1]}': {e}")
-    
-    return user, reason
+        logger.warning(f"Could not resolve user identifier '{user_identifier}': {e}")
+        return None, None
 
 async def split_text_into_pages(lines, max_length=1000):
     """Split text lines into pages that fit within message limits."""
