@@ -82,7 +82,19 @@ async def check_pending_timers(client):
                         # Timer has already expired, send notification
                         end_message = "Your timer has ended."
                         if reason:
-                            end_message += f" Reason: {reason}"
+                            end_message += f"\nReason: {reason}"
+                        
+                        # If it's a group chat, mention the user
+                        if chat_id < 0:  # Negative chat_id indicates group/supergroup
+                            try:
+                                user = await client.get_users(user_id)
+                                user_name = user.first_name
+                                if user.last_name:
+                                    user_name += f" {user.last_name}"
+                                end_message = f"[{user_name}](tg://user?id={user_id}), y" + end_message[1:]
+                            except:
+                                end_message = f"[@user](tg://user?id={user_id}), y" + end_message[1:]
+                        
                         await client.send_message(chat_id, end_message, reply_to_message_id=message_id)
                         
                         # Update the timer status to 'ended'
@@ -90,7 +102,7 @@ async def check_pending_timers(client):
                     else:
                         # Schedule timer notification for future
                         delay = (end_time - now).total_seconds()
-                        task = asyncio.create_task(schedule_timer(client, chat_id, timer_id, delay, reason, message_id))
+                        task = asyncio.create_task(schedule_timer(client, chat_id, timer_id, delay, reason, message_id, user_id))
                         
                         # Store the task in our global dictionary
                         timer_key = (chat_id, timer_id)
@@ -98,7 +110,7 @@ async def check_pending_timers(client):
                         
                 await connection.commit()
 
-async def schedule_timer(client, chat_id, timer_id, delay, reason, message_id=None):
+async def schedule_timer(client, chat_id, timer_id, delay, reason, message_id=None, user_id=None):
     """
     Sleeps for the specified delay, then notifies the user that the timer has ended.
     After sending a message, update the timer status to 'ended'.
@@ -112,16 +124,30 @@ async def schedule_timer(client, chat_id, timer_id, delay, reason, message_id=No
             
             async with connection.cursor() as cursor:
                 await cursor.execute(
-                    f"SELECT id FROM {table_name} WHERE id = ? AND status = 'active'",
+                    f"SELECT user_id FROM {table_name} WHERE id = ? AND status = 'active'",
                     (timer_id,)
                 )
                 result = await cursor.fetchone()
                 
                 if result:  # Timer still exists and is active
+                    if user_id is None:
+                        user_id = result[0]  # Get user_id from database if not provided
+                    
                     # Send notification
                     end_message = "Your timer has ended."
                     if reason:
                         end_message += f"\nReason: **{reason}**"
+                    
+                    # If it's a group chat, mention the user
+                    if chat_id < 0:  # Negative chat_id indicates group/supergroup
+                        try:
+                            user = await client.get_users(user_id)
+                            user_name = user.first_name
+                            if user.last_name:
+                                user_name += f" {user.last_name}"
+                            end_message = f"[{user_name}](tg://user?id={user_id}), y" + end_message[1:]
+                        except:
+                            end_message = f"[@user](tg://user?id={user_id}), y" + end_message[1:]
                     
                     if message_id:
                         await client.send_message(chat_id, end_message, reply_to_message_id=message_id)
