@@ -12,6 +12,14 @@ from .file_utils import safe_delete
 async def yt_quality_button(client: Client, callback_query):
     """Handle video quality selection callback."""
     try:
+        # Check if the user triggering the callback is the same as the one who initiated the command
+        user_data_key = f"yt_data_{callback_query.message.chat.id}_{callback_query.from_user.id}"
+        yt_data = getattr(client, 'user_data', {}).get(user_data_key)
+        
+        if not yt_data:
+            await callback_query.answer("❌ This button is not for you or the session has expired.", show_alert=True)
+            return
+            
         await callback_query.answer()
         
         index = int(callback_query.data.split("_")[1])
@@ -26,13 +34,6 @@ async def yt_quality_button(client: Client, callback_query):
                 return
             
             await callback_query.message.edit("🔍 Preparing download... fetching video details")
-            
-            user_data_key = f"yt_data_{callback_query.message.chat.id}_{callback_query.from_user.id}"
-            yt_data = getattr(client, 'user_data', {}).get(user_data_key)
-            
-            if not yt_data:
-                await callback_query.message.edit("Session expired. Please use /yt command again.")
-                return
             
             video_url = yt_data['video_url']
             options = yt_data['options']
@@ -125,6 +126,14 @@ async def yt_quality_button(client: Client, callback_query):
 async def yt_audio_button(client: Client, callback_query):
     """Handle audio quality selection callback."""
     try:
+        # Check if the user triggering the callback is the same as the one who initiated the command
+        audio_key = f"yt_audio_{callback_query.message.chat.id}_{callback_query.from_user.id}"
+        audio_options = getattr(client, 'user_data', {}).get(audio_key)
+        
+        if not audio_options:
+            await callback_query.answer("❌ This button is not for you or the session has expired.", show_alert=True)
+            return
+            
         await callback_query.answer()
         
         index = int(callback_query.data.split("_")[2])
@@ -231,6 +240,14 @@ async def yt_audio_button(client: Client, callback_query):
 async def yt_subs_callback(client: Client, callback_query):
     """Handle subtitle language selection callback."""
     try:
+        # Check if the user triggering the callback is the same as the one who initiated the command
+        subs_key = f"subs_data_{callback_query.message.chat.id}_{callback_query.from_user.id}"
+        subs_data = getattr(client, 'user_data', {}).get(subs_key)
+        
+        if not subs_data:
+            await callback_query.answer("❌ This button is not for you or the session has expired.", show_alert=True)
+            return
+            
         await callback_query.answer()
         
         lang = callback_query.data.split("_", 1)[1]
